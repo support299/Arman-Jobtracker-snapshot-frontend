@@ -17,6 +17,11 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 // Replace this with your actual login action
 import { loginUser, clearSuccess } from '../../store/slices/authSlice';
 import { USER_PASSWORD } from '../../store/axios/axios';
+import {
+  appendLocationIdToPath,
+  getIframeLocationId,
+  setIframeLocationId,
+} from '../../utils/iframeContext';
 
 const UserLogin = () => {
   const dispatch = useDispatch();
@@ -24,80 +29,85 @@ const UserLogin = () => {
   const { loading, error, success } = useSelector((state) => state.auth);
   const [searchParams] = useSearchParams();
   const email = searchParams.get("email");
+  const locationId = searchParams.get("location_id");
   const navigationHandled = useRef(false);
+
+  const defaultRedirectPath = (userRole) => {
+    if (userRole === 'admin' || userRole === 'manager') {
+      return appendLocationIdToPath('/admin/dashboard');
+    }
+    return appendLocationIdToPath('/admin/jobs');
+  };
+
+  useEffect(() => {
+    if (locationId) {
+      setIframeLocationId(locationId);
+    }
+  }, [locationId]);
 
   useEffect(() => {
     if (email) {
       navigationHandled.current = true;
-      // Read returnTo BEFORE login to avoid race condition with success useEffect
       const returnTo = localStorage.getItem('returnTo');
       console.log('returnTo (auto-login email - before dispatch):', returnTo);
-      
-      dispatch(loginUser({ username: email, password: USER_PASSWORD }))
+
+      dispatch(loginUser({
+        username: email,
+        password: USER_PASSWORD,
+        location_id: locationId || getIframeLocationId(),
+      }))
         .unwrap()
         .then((response) => {
           if (returnTo) {
-            // Clear the stored path and redirect to it
             localStorage.removeItem('returnTo');
             dispatch(clearSuccess());
-            navigate(returnTo, { replace: true });
+            navigate(appendLocationIdToPath(returnTo), { replace: true });
           } else {
-            // Default redirect based on role
             const userRole = response?.user?.role || 'worker';
             dispatch(clearSuccess());
-            if (userRole === 'admin' || userRole === 'manager') {
-              navigate("/admin/dashboard", { replace: true });
-            } else {
-              navigate("/admin/jobs", { replace: true });
-            }
+            navigate(defaultRedirectPath(userRole), { replace: true });
           }
         })
         .catch(() => {
           navigationHandled.current = false;
         });
     }
-  }, [email, dispatch, navigate]);
+  }, [email, locationId, dispatch, navigate]);
 
   // Note: Navigation is handled in form submission and auto-login handlers above
   // This useEffect is kept as a fallback only if navigation wasn't handled
-  useEffect(()=>{
+  useEffect(() => {
     if (success && !navigationHandled.current) {
-      // Check if navigation was already handled by form/auto-login handlers
       const timer = setTimeout(() => {
         const returnTo = localStorage.getItem('returnTo');
         console.log('returnTo (success useEffect fallback):', returnTo);
-        
-        // If returnTo still exists, it means form/auto-login didn't handle it
+
         if (returnTo) {
           localStorage.removeItem('returnTo');
           dispatch(clearSuccess());
-          navigate(returnTo, { replace: true });
+          navigate(appendLocationIdToPath(returnTo), { replace: true });
+          return;
+        }
+
+        const currentPath = window.location.pathname;
+        if (currentPath === '/admin/login') {
+          const user = JSON.parse(localStorage.getItem('user') || '{}');
+          const userRole = user?.role || 'worker';
+          dispatch(clearSuccess());
+          navigate(defaultRedirectPath(userRole), { replace: true });
         } else {
-          // Check if we're still on login page (navigation wasn't handled)
-          const currentPath = window.location.pathname;
-          if (currentPath === '/admin/login') {
-            const user = JSON.parse(localStorage.getItem('user') || '{}');
-            const userRole = user?.role || 'worker';
-            dispatch(clearSuccess());
-            if (userRole === 'admin' || userRole === 'manager') {
-              navigate('/admin/dashboard', { replace: true });
-            } else {
-              navigate('/admin/jobs', { replace: true });
-            }
-          } else {
-            // Navigation was already handled, just clear success
-            dispatch(clearSuccess());
-          }
+          dispatch(clearSuccess());
         }
       }, 100);
-      
+
       return () => clearTimeout(timer);
-    } else if (success && navigationHandled.current) {
-      // Navigation was handled, just clear success
+    }
+
+    if (success && navigationHandled.current) {
       dispatch(clearSuccess());
       navigationHandled.current = false;
     }
-  },[success, navigate, dispatch]);
+  }, [success, navigate, dispatch]);
 
   const formik = useFormik({
     initialValues: {
@@ -115,22 +125,19 @@ const UserLogin = () => {
         const returnTo = localStorage.getItem('returnTo');
         console.log('returnTo (form login - before dispatch):', returnTo);
         
-        const response = await dispatch(loginUser(values)).unwrap();
-        
+        const response = await dispatch(loginUser({
+          ...values,
+          location_id: locationId || getIframeLocationId(),
+        })).unwrap();
+
         if (returnTo) {
-          // Clear the stored path and redirect to it
           localStorage.removeItem('returnTo');
           dispatch(clearSuccess());
-          navigate(returnTo, { replace: true });
+          navigate(appendLocationIdToPath(returnTo), { replace: true });
         } else {
-          // Default redirect based on role
           const userRole = response?.user?.role || 'worker';
           dispatch(clearSuccess());
-          if (userRole === 'admin' || userRole === 'manager') {
-            navigate('/admin/dashboard', { replace: true });
-          } else {
-            navigate('/admin/jobs', { replace: true });
-          }
+          navigate(defaultRedirectPath(userRole), { replace: true });
         }
       } catch (error) {
         navigationHandled.current = false;

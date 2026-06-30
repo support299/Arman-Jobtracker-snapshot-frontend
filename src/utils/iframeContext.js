@@ -1,0 +1,42 @@
+const STORAGE_KEY = 'iframe_location_id';
+
+export function getIframeLocationId() {
+  if (typeof window === 'undefined') return null;
+  const fromUrl = new URLSearchParams(window.location.search).get('location_id');
+  if (fromUrl) {
+    sessionStorage.setItem(STORAGE_KEY, fromUrl);
+    return fromUrl;
+  }
+  return sessionStorage.getItem(STORAGE_KEY);
+}
+
+export function setIframeLocationId(locationId) {
+  if (!locationId || typeof window === 'undefined') return;
+  sessionStorage.setItem(STORAGE_KEY, locationId);
+}
+
+export function clearIframeLocationId() {
+  if (typeof window === 'undefined') return;
+  sessionStorage.removeItem(STORAGE_KEY);
+}
+
+export function appendLocationIdToPath(path, locationId = getIframeLocationId()) {
+  if (!locationId) return path;
+  const [pathname, search = ''] = path.split('?');
+  const params = new URLSearchParams(search);
+  params.set('location_id', locationId);
+  const query = params.toString();
+  return query ? `${pathname}?${query}` : pathname;
+}
+
+export function withLocationIdParams(params = {}) {
+  const locationId = getIframeLocationId();
+  if (!locationId) return params;
+  return { ...params, location_id: locationId };
+}
+
+export function withLocationIdHeaders(headers = {}) {
+  const locationId = getIframeLocationId();
+  if (!locationId) return headers;
+  return { ...headers, 'X-Location-Id': locationId };
+}

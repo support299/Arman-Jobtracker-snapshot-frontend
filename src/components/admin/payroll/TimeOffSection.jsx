@@ -247,9 +247,8 @@ const TimeOffSection = ({ hideHero = false }) => {
   const { toast } = useToast();
   const user = useSelector((state) => state.auth.user);
 
-  const normalizedRole = String(user?.role ?? 'worker').toLowerCase();
-  const isManagerOrSupervisor = ['admin', 'manager', 'supervisor'].includes(normalizedRole);
   const canManageTimeOff = canManagePayrollTimeOff(user);
+  const showEmployeeColumn = canManageTimeOff;
 
   const [listRange, setListRange] = useState(() => defaultRange());
   const [formEmployee, setFormEmployee] = useState('');
@@ -788,7 +787,7 @@ const TimeOffSection = ({ hideHero = false }) => {
                   <Table size="small">
                     <TableHead>
                       <TableRow sx={{ bgcolor: '#f1f5f9' }}>
-                        {isManagerOrSupervisor && (
+                        {showEmployeeColumn && (
                           <TableCell sx={{ fontWeight: 600, color: '#64748b', fontSize: '0.8125rem' }}>Employee</TableCell>
                         )}
                         <TableCell sx={{ fontWeight: 600, color: '#64748b', fontSize: '0.8125rem' }}>Type</TableCell>
@@ -813,7 +812,7 @@ const TimeOffSection = ({ hideHero = false }) => {
                         const rowKey = row.id ?? `row-${row.start_date}-${row.end_date}-${row.employee}`;
                         return (
                           <TableRow key={rowKey} hover sx={{ '&:last-child td': { borderBottom: 0 } }}>
-                            {isManagerOrSupervisor && (
+                            {showEmployeeColumn && (
                               <TableCell>
                                 <Box display="flex" alignItems="center" gap={1.5}>
                                   <Avatar sx={{ width: 36, height: 36, fontSize: '0.75rem', bgcolor: PAYROLL_NAVY }}>
@@ -987,7 +986,7 @@ const TimeOffSection = ({ hideHero = false }) => {
                           </Tooltip>
                         </Stack>
                       )}
-                      {isManagerOrSupervisor && (
+                      {showEmployeeColumn && (
                         <Box display="flex" alignItems="center" gap={1.5} mb={1.5}>
                           <Avatar sx={{ width: 40, height: 40, fontSize: '0.8rem', bgcolor: PAYROLL_NAVY }}>
                             {getInitials(row.employee_name)}

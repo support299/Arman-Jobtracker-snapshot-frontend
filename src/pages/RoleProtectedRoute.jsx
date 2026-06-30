@@ -2,21 +2,23 @@
 import React from 'react';
 import { Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
+import { appendLocationIdToPath } from '../utils/iframeContext';
+import { isRoleAllowed } from '../utils/roleAccess';
 
 const RoleProtectedRoute = ({ children, allowedRoles, redirectPath }) => {
   const user = useSelector((state) => state.auth.user);
   const role = user?.role || 'worker';
 
-  if (!allowedRoles.includes(role)) {
+  if (!isRoleAllowed(role, allowedRoles)) {
     if (redirectPath) {
-      return <Navigate to={redirectPath} replace />;
+      return <Navigate to={appendLocationIdToPath(redirectPath)} replace />;
     }
 
-    // Redirect workers trying to access admin-only pages to their jobs page
     if (role === 'worker') {
-      return <Navigate to="/admin/jobs" replace />;
+      return <Navigate to={appendLocationIdToPath('/admin/jobs')} replace />;
     }
-    return <Navigate to="/admin/unauthorized" replace />;
+
+    return <Navigate to={appendLocationIdToPath('/admin/unauthorized')} replace />;
   }
 
   return children;

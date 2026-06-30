@@ -46,7 +46,9 @@ import PayrollSettings from './pages/admin/payroll/PayrollSettings.jsx';
 import PayrollTeamManagement from './pages/admin/payroll/PayrollTeamManagement.jsx';
 import Contacts from './pages/admin/Contacts.jsx';
 import ContactDetail from './pages/admin/ContactDetail.jsx';
+import Unauthorized from './pages/admin/Unauthorized.jsx';
 import { canAccessPayrollTimeClock } from './utils/payrollAccess.js';
+import { appendLocationIdToPath } from './utils/iframeContext.js';
 
 // Create Material-UI theme that integrates with our design system
 const theme = createTheme({
@@ -93,7 +95,7 @@ const PayrollTimeClockRoute = () => {
   }
 
   if (!canAccessPayrollTimeClock(user?.role, userProfile)) {
-    return <Navigate to="/admin/payroll/reports" replace />;
+    return <Navigate to={appendLocationIdToPath('/admin/payroll/reports')} replace />;
   }
 
   return <TimeClock />;
@@ -126,7 +128,7 @@ function App() {
                   {/* Standalone Calendar Create Job Route (no AdminLayout) */}
                   <Route path="/admin/calendar/create-job" element={
                     <AdminProtectedRoute>
-                      <RoleProtectedRoute allowedRoles={['admin', 'manager', 'supervisor']}>
+                      <RoleProtectedRoute allowedRoles={['admin', 'manager', 'supervisor', 'agency']}>
                         <CalendarCreateJob />
                       </RoleProtectedRoute>
                     </AdminProtectedRoute>
@@ -146,6 +148,7 @@ function App() {
                       </RoleProtectedRoute>
                     } />
                     <Route path="jobs" element={<Jobs />} />
+                    <Route path="unauthorized" element={<Unauthorized />} />
                     <Route path="map" element={
                         <RoleProtectedRoute allowedRoles={['admin', 'manager', 'supervisor']}>
                           <JobsMap />

@@ -125,7 +125,6 @@ export const quoteApi = createApi({
       query: ({ location_id }) => ({
         url: 'account-info/',
         params: { location_id },
-        headers: location_id ? { 'X-Location-Id': location_id } : undefined,
       }),
     }),
     submitOnlyCustomProducts: builder.mutation({

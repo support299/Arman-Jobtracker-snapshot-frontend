@@ -145,7 +145,6 @@ export async function fetchCompanyProfileByLocationId(locationId) {
 
   const { data } = await axiosInstance.get(`${BASE_URL}/quote/account-info/`, {
     params: { location_id: locationId },
-    headers: { 'X-Location-Id': locationId },
   });
 
   return mapAccountInfoToCompanyProfile(data);

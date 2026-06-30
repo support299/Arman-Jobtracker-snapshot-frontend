@@ -1,4 +1,5 @@
 "use client"
+import { useState, useMemo, useEffect } from "react"
 import {
   AppBar,
   Box,
@@ -53,7 +54,6 @@ import {
   AccountCircle,
   Contacts as ContactsIcon,
 } from "@mui/icons-material"
-import { useState, useMemo } from "react"
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
 import { logoutUser } from "../../store/slices/authSlice"
@@ -63,6 +63,7 @@ import {
   canAccessPayrollAdminSections,
   canAccessPayrollTimeClock,
 } from "../../utils/payrollAccess"
+import { appendLocationIdToPath, setIframeLocationId } from "../../utils/iframeContext"
 
 // Navigation configuration based on roles
 const getNavItemsByRole = (role, fullAccessRoles, user_profile) => {
@@ -177,6 +178,12 @@ export const AdminLayout = ({ children }) => {
 
   const location_id = searchParams.get("location_id")
 
+  useEffect(() => {
+    if (location_id) {
+      setIframeLocationId(location_id)
+    }
+  }, [location_id])
+
   const user_profile = useSelector((state) => state.auth.user_profile)
   const user = useSelector((state) => state.auth.user)
 
@@ -184,7 +191,7 @@ export const AdminLayout = ({ children }) => {
   const userRole = user?.role || "worker"
   const userName = user_profile?.full_name || "User"
 
-  const fullAccessRoles = ["admin", "manager", "supervisor"]
+  const fullAccessRoles = ["admin", "manager", "supervisor", "agency"]
 
   // Use useMemo to recalculate navigation items when user_profile changes
   // This ensures navigation updates when user_profile loads after login
@@ -249,7 +256,7 @@ export const AdminLayout = ({ children }) => {
   }
 
   const handleNavigate = (path) => {
-    navigate(path)
+    navigate(appendLocationIdToPath(path, location_id))
     handleManagementClose()
     handleMobileMenuClose()
   }
@@ -277,6 +284,8 @@ export const AdminLayout = ({ children }) => {
       admin: "Administrator",
       worker: "Employee",
       manager: "Manager",
+      supervisor: "Supervisor",
+      agency: "Agency Admin",
     }
     return roleLabels[role] || "User"
   }
@@ -286,6 +295,8 @@ export const AdminLayout = ({ children }) => {
       admin: "error",
       worker: "primary",
       manager: "warning",
+      supervisor: "info",
+      agency: "secondary",
     }
     return roleColors[role] || "default"
   }
