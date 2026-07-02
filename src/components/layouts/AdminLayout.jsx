@@ -159,7 +159,7 @@ const getManagementItemsByRole = (role, fullAccessRoles) => {
     { text: "Service Management", path: "/admin/services", icon: BusinessCenter },
     { text: "Location Management", path: "/admin/locations", icon: LocationOn },
     { text: "Account Settings", path: "/admin/account-settings", icon: Settings },
-    { text: "Subaccount Management", path: "/admin/subaccounts", icon: AccountTree },
+    { text: "Platform Portal", path: "/platform/dashboard", icon: AccountTree },
     // { text: "House Size Info", path: "/admin/house-size-info", icon: Home },
   ]
 }
@@ -210,7 +210,7 @@ export const AdminLayout = ({ children }) => {
   const managementItems = useMemo(() => {
     const items = getManagementItemsByRole(userRole, fullAccessRoles)
     return items.filter((item) => {
-      if (item.path !== "/admin/subaccounts") return true
+      if (item.path !== "/platform/dashboard") return true
       if (location_id) return false
       return Boolean(user?.is_superuser)
     })
@@ -258,7 +258,10 @@ export const AdminLayout = ({ children }) => {
   }
 
   const handleNavigate = (path) => {
-    navigate(appendLocationIdToPath(path, location_id))
+    const target = path.startsWith("/platform")
+      ? path
+      : appendLocationIdToPath(path, location_id)
+    navigate(target)
     handleManagementClose()
     handleMobileMenuClose()
   }

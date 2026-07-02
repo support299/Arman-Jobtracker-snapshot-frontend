@@ -16,7 +16,6 @@ import { AdminLayout } from './components/layouts/AdminLayout.jsx';
 import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import ServicesManagement from './pages/admin/ServicesManagement.jsx';
 import LocationsManagement from './pages/admin/LocationsManagement.jsx';
-import SubaccountsManagement from './pages/admin/SubaccountsManagement.jsx';
 import AccountSettings from './pages/admin/AccountSettings.jsx';
 import LocationOAuthCallback from './pages/admin/LocationOAuthCallback.jsx';
 import { BookingWizard } from './components/user/BookingWizard.jsx';
@@ -25,8 +24,15 @@ import AdminProtectedRoute from './pages/AdminProtectedRoute.jsx';
 import QuoteDetailsPage from './pages/user/QuoteDetailsPage.jsx';
 import OriginalProposalPage from './pages/user/OriginalProposalPage.jsx';
 import HouseSizeInfo from './components/admin/HouseSizeInfo.jsx';
-import LocationScopedManagementGuard from './components/admin/LocationScopedManagementGuard.jsx';
-import SuperuserProtectedRoute from './pages/SuperuserProtectedRoute.jsx';
+import PlatformProtectedRoute from './platform/PlatformProtectedRoute.jsx';
+import PlatformLayout from './platform/PlatformLayout.jsx';
+import PlatformDashboard from './platform/pages/PlatformDashboard.jsx';
+import PlatformAccounts from './platform/pages/PlatformAccounts.jsx';
+import PlatformAccountDetail from './platform/pages/PlatformAccountDetail.jsx';
+import PlatformOnboarding from './platform/pages/PlatformOnboarding.jsx';
+import PlatformHealth from './platform/pages/PlatformHealth.jsx';
+import PlatformAudit from './platform/pages/PlatformAudit.jsx';
+import PlatformCompanies from './platform/pages/PlatformCompanies.jsx';
 import { PersistGate } from 'redux-persist/integration/react';
 import TermsAndConditions from './pages/user/TermsAndConditions.jsx';
 import Jobs from './pages/admin/Jobs.jsx';
@@ -128,6 +134,22 @@ function App() {
                   
                   {/* Admin Login Route */}
                   <Route path="/admin/login" element={<UserLogin />} />
+
+                  {/* Platform Portal — superuser only, separate shell */}
+                  <Route path="/platform" element={
+                    <PlatformProtectedRoute>
+                      <PlatformLayout />
+                    </PlatformProtectedRoute>
+                  }>
+                    <Route index element={<Navigate to="/platform/dashboard" replace />} />
+                    <Route path="dashboard" element={<PlatformDashboard />} />
+                    <Route path="accounts" element={<PlatformAccounts />} />
+                    <Route path="accounts/:id" element={<PlatformAccountDetail />} />
+                    <Route path="onboarding" element={<PlatformOnboarding />} />
+                    <Route path="health" element={<PlatformHealth />} />
+                    <Route path="audit" element={<PlatformAudit />} />
+                    <Route path="companies" element={<PlatformCompanies />} />
+                  </Route>
                   
                   {/* Standalone Calendar Create Job Route (no AdminLayout) */}
                   <Route path="/admin/calendar/create-job" element={
@@ -225,14 +247,7 @@ function App() {
                         </RoleProtectedRoute>
                       }
                     />
-                    <Route path="subaccounts" element={
-                        <LocationScopedManagementGuard>
-                          <SuperuserProtectedRoute>
-                            <SubaccountsManagement />
-                          </SuperuserProtectedRoute>
-                        </LocationScopedManagementGuard>
-                      }
-                    />
+                    <Route path="subaccounts" element={<Navigate to="/platform/accounts" replace />} />
                     
                     {/* Payroll Routes */}
                     <Route path="payroll" element={<PayrollTimeClockRoute />} />

@@ -26,7 +26,7 @@ const LocationOAuthCallback = () => {
         await axiosInstance.get(`${BASE_URL}/accounts/auth/tokens/`, {
           params: { code, redirect_uri: redirectUri },
         })
-        navigate("/admin/subaccounts?connected=1", { replace: true })
+        navigate("/platform/onboarding?connected=1", { replace: true })
       } catch (err) {
         const detail =
           err?.response?.data?.detail ||
@@ -54,8 +54,8 @@ const LocationOAuthCallback = () => {
         <Alert severity="error" sx={{ maxWidth: 480 }}>
           {error}
         </Alert>
-        <Button variant="contained" onClick={() => navigate("/admin/subaccounts")}>
-          Back to Subaccount Management
+        <Button variant="contained" onClick={() => navigate("/platform/onboarding")}>
+          Back to Platform Onboarding
         </Button>
       </Box>
     )
