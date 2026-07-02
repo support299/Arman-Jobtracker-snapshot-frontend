@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useCallback } from 'react';
 import {
   Box,
   Card,
@@ -8,29 +8,28 @@ import {
   Button,
   CircularProgress,
   Link as MuiLink,
+  Alert,
 } from '@mui/material';
 import { useDispatch, useSelector } from 'react-redux';
 import { useFormik } from 'formik';
 import * as Yup from 'yup';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 
-// Replace this with your actual login action
 import { loginUser, clearSuccess } from '../../store/slices/authSlice';
-import { USER_PASSWORD } from '../../store/axios/axios';
+import { useUrlSsoLogin } from '../../hooks/useUrlSsoLogin';
+import { friendlySsoErrorMessage } from '../../utils/urlSsoLogin';
 import {
   appendLocationIdToPath,
   getIframeLocationId,
-  setIframeLocationId,
 } from '../../utils/iframeContext';
 
 const UserLogin = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { loading, error, success } = useSelector((state) => state.auth);
+  const { loading, error } = useSelector((state) => state.auth);
   const [searchParams] = useSearchParams();
-  const email = searchParams.get("email");
-  const locationId = searchParams.get("location_id");
-  const navigationHandled = useRef(false);
+  const email = searchParams.get('email');
+  const locationId = searchParams.get('location_id');
 
   const defaultRedirectPath = (userRole) => {
     if (userRole === 'admin' || userRole === 'manager') {
@@ -39,75 +38,26 @@ const UserLogin = () => {
     return appendLocationIdToPath('/admin/jobs');
   };
 
-  useEffect(() => {
-    if (locationId) {
-      setIframeLocationId(locationId);
-    }
-  }, [locationId]);
-
-  useEffect(() => {
-    if (email) {
-      navigationHandled.current = true;
+  const finishLoginNavigation = useCallback(
+    (response) => {
       const returnTo = localStorage.getItem('returnTo');
-      console.log('returnTo (auto-login email - before dispatch):', returnTo);
-
-      dispatch(loginUser({
-        username: email,
-        password: USER_PASSWORD,
-        location_id: locationId || getIframeLocationId(),
-      }))
-        .unwrap()
-        .then((response) => {
-          if (returnTo) {
-            localStorage.removeItem('returnTo');
-            dispatch(clearSuccess());
-            navigate(appendLocationIdToPath(returnTo), { replace: true });
-          } else {
-            const userRole = response?.user?.role || 'worker';
-            dispatch(clearSuccess());
-            navigate(defaultRedirectPath(userRole), { replace: true });
-          }
-        })
-        .catch(() => {
-          navigationHandled.current = false;
-        });
-    }
-  }, [email, locationId, dispatch, navigate]);
-
-  // Note: Navigation is handled in form submission and auto-login handlers above
-  // This useEffect is kept as a fallback only if navigation wasn't handled
-  useEffect(() => {
-    if (success && !navigationHandled.current) {
-      const timer = setTimeout(() => {
-        const returnTo = localStorage.getItem('returnTo');
-        console.log('returnTo (success useEffect fallback):', returnTo);
-
-        if (returnTo) {
-          localStorage.removeItem('returnTo');
-          dispatch(clearSuccess());
-          navigate(appendLocationIdToPath(returnTo), { replace: true });
-          return;
-        }
-
-        const currentPath = window.location.pathname;
-        if (currentPath === '/admin/login') {
-          const user = JSON.parse(localStorage.getItem('user') || '{}');
-          const userRole = user?.role || 'worker';
-          dispatch(clearSuccess());
-          navigate(defaultRedirectPath(userRole), { replace: true });
-        } else {
-          dispatch(clearSuccess());
-        }
-      }, 100);
-
-      return () => clearTimeout(timer);
-    }
-
-    if (success && navigationHandled.current) {
+      if (returnTo) {
+        localStorage.removeItem('returnTo');
+        dispatch(clearSuccess());
+        navigate(appendLocationIdToPath(returnTo), { replace: true });
+        return;
+      }
+      const userRole = response?.user?.role || 'worker';
       dispatch(clearSuccess());
-      navigationHandled.current = false;
-    }
-  }, [success, navigate, dispatch]);
+      navigate(defaultRedirectPath(userRole), { replace: true });
+    },
+    [dispatch, navigate],
+  );
+
+  const { switching, ssoError, loading: ssoLoading } = useUrlSsoLogin({
+    enabled: Boolean((email || searchParams.get('sso_token')) && (locationId || getIframeLocationId())),
+    onSuccess: finishLoginNavigation,
+  });
 
   const formik = useFormik({
     initialValues: {
@@ -120,15 +70,14 @@ const UserLogin = () => {
     }),
     onSubmit: async (values) => {
       try {
-        navigationHandled.current = true;
-        // Read returnTo BEFORE login to avoid race condition with success useEffect
         const returnTo = localStorage.getItem('returnTo');
-        console.log('returnTo (form login - before dispatch):', returnTo);
-        
-        const response = await dispatch(loginUser({
-          ...values,
-          location_id: locationId || getIframeLocationId(),
-        })).unwrap();
+
+        const response = await dispatch(
+          loginUser({
+            ...values,
+            location_id: locationId || getIframeLocationId(),
+          }),
+        ).unwrap();
 
         if (returnTo) {
           localStorage.removeItem('returnTo');
@@ -139,12 +88,34 @@ const UserLogin = () => {
           dispatch(clearSuccess());
           navigate(defaultRedirectPath(userRole), { replace: true });
         }
-      } catch (error) {
-        navigationHandled.current = false;
+      } catch {
         // Error is handled by Redux state
       }
     },
   });
+
+  const isAutoLoggingIn = (ssoLoading || loading) && (email || searchParams.get('sso_token'));
+
+  if (isAutoLoggingIn && !ssoError) {
+    return (
+      <Box
+        sx={{
+          minHeight: '100vh',
+          bgcolor: '#f4f5f7',
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          gap: 2,
+        }}
+      >
+        <CircularProgress size={32} />
+        <Typography color="text.secondary">
+          Signing in{email ? ` as ${email}` : ''}…
+        </Typography>
+      </Box>
+    );
+  }
 
   return (
     <Box
@@ -175,6 +146,12 @@ const UserLogin = () => {
               Sign in to your account
             </Typography>
           </Box>
+
+          {ssoError && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              {friendlySsoErrorMessage(ssoError, email)}
+            </Alert>
+          )}
 
           <form onSubmit={formik.handleSubmit} noValidate>
             <Box mb={2}>
@@ -224,7 +201,7 @@ const UserLogin = () => {
             </Button>
 
             <Typography variant="body2" align="center" color="text.secondary">
-              Don't have an account?{' '}
+              Don&apos;t have an account?{' '}
               <MuiLink component={Link} to="/signup" color="primary">
                 Sign up
               </MuiLink>

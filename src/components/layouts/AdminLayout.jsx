@@ -64,6 +64,7 @@ import {
   canAccessPayrollTimeClock,
 } from "../../utils/payrollAccess"
 import { appendLocationIdToPath, setIframeLocationId } from "../../utils/iframeContext"
+import IframeSsoLoginHandler from "../auth/IframeSsoLoginHandler"
 
 // Navigation configuration based on roles
 const getNavItemsByRole = (role, fullAccessRoles, user_profile) => {
@@ -157,6 +158,7 @@ const getManagementItemsByRole = (role, fullAccessRoles) => {
     // { text: "Calendar", path: "/admin/calendar", icon: Event },
     { text: "Service Management", path: "/admin/services", icon: BusinessCenter },
     { text: "Location Management", path: "/admin/locations", icon: LocationOn },
+    { text: "Account Settings", path: "/admin/account-settings", icon: Settings },
     { text: "Subaccount Management", path: "/admin/subaccounts", icon: AccountTree },
     // { text: "House Size Info", path: "/admin/house-size-info", icon: Home },
   ]
@@ -303,6 +305,7 @@ export const AdminLayout = ({ children }) => {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", minHeight: "100vh" }}>
+      <IframeSsoLoginHandler />
       {/* Main Navigation Bar */}
       {!shouldHideNavbar && (
         <AppBar

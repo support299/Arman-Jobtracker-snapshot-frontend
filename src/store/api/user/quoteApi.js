@@ -4,7 +4,7 @@ import { axiosBaseQuery, BASE_URL, axiosInstance } from '../../axios/axios';
 export const quoteApi = createApi({
   reducerPath: 'quoteApi',
   baseQuery: axiosBaseQuery({ baseUrl: BASE_URL + '/quote/' }),
-  tagTypes: ['quote', 'ReschedulePending'],
+  tagTypes: ['quote', 'ReschedulePending', 'AccountInfo', 'ContactAddresses'],
   endpoints: (builder) => ({
     getInitialData: builder.query({
         query: (params)=>({url:'initial-data/', params}),
@@ -71,6 +71,15 @@ export const quoteApi = createApi({
         url: `address/by-contact/${id}/`,
         method: "GET",
       }),
+      providesTags: (result, error, id) => [{ type: 'ContactAddresses', id }],
+    }),
+    createAddressForContact: builder.mutation({
+      query: ({ contactId, ...payload }) => ({
+        url: `address/by-contact/${contactId}/`,
+        method: 'POST',
+        data: payload,
+      }),
+      invalidatesTags: (result, error, { contactId }) => [{ type: 'ContactAddresses', id: contactId }],
     }),
     createCustomProduct: builder.mutation({
       query: (payload) => ({
@@ -126,6 +135,7 @@ export const quoteApi = createApi({
         url: 'account-info/',
         params: { location_id },
       }),
+      providesTags: ['AccountInfo'],
     }),
     submitOnlyCustomProducts: builder.mutation({
       query: (submissionId) => ({
@@ -240,7 +250,7 @@ export const quoteApi = createApi({
 });
 
 export const { useGetInitialDataQuery, useGetServiceQuestionsQuery, useCreateSubmissionMutation, useUpdateSubmissionMutation, useCreateQuestionResponsesMutation,
-  useCreateServiceToSubmissionMutation,   useGetQuoteDetailsQuery,useSubmitQuoteMutation, useGetAddressesByContactQuery, useSearchContactsQuery, useCreateCustomProductMutation,
+  useCreateServiceToSubmissionMutation,   useGetQuoteDetailsQuery,useSubmitQuoteMutation, useGetAddressesByContactQuery, useCreateAddressForContactMutation, useSearchContactsQuery, useCreateCustomProductMutation,
   useUpdateCustomProductMutation, useDeleteCustomProductMutation, useGetServicesQuery, useCreateScheduleMutation, useDeleteServiceMutation, useGetGlobalPriceQuery,
   useGetCalendarFreeSlotsQuery, useSubmitOnlyCustomProductsMutation, useRejectQuoteMutation, useUpdateAdditionalDataMutation, usePersistQuoteSnapshotMutation, useGetAccountInfoQuery, useUploadSubmissionImageMutation, useGetSubmissionImagesQuery,
   useUpdateSubmissionImageMutation, useDeleteSubmissionImageMutation, useReplaceSubmissionImageMutation,

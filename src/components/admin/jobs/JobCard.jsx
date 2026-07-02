@@ -8,6 +8,7 @@ import { useRescheduleQuoteFromJobMutation } from "../../../store/api/user/quote
 import { slotWallClockAsUtcIso } from "../../../utils/scheduleIso"
 import QuoteCalendarScheduler from "../../user/QuoteCalendarScheduler"
 import { jobSurchargeAmount, overlayJobDetail } from "../../../utils/jobPricing"
+import { resolveJobInvoiceUrl } from "../../../utils/invoiceLink"
 import { useToast } from "@/hooks/use-toast"
 import { useAccountTimezone } from "@/hooks/useAccountTimezone"
 import { useMoneyFormatter } from "@/hooks/useMoneyFormatter"
@@ -114,6 +115,7 @@ export function JobCard({
     if (!job) return null
     return overlayJobDetail(job, jobDetailsData)
   }, [job, jobDetailsData])
+  const invoiceUrl = resolveJobInvoiceUrl(pricingJob || job)
   const uploadedJobImages = jobDetailsData?.images ?? job?.images ?? []
   const hasUploadedJobImages = Array.isArray(uploadedJobImages) && uploadedJobImages.length > 0
 
@@ -1069,13 +1071,13 @@ export function JobCard({
           </Box>
 
           {/* Invoice URL - Only show for completed jobs - Fixed height */}
-          <Box sx={{ mb: 3, minHeight: job.status === "completed" && job.invoice_url ? '100px' : '0px' }}>
-            {job.status === "completed" && job.invoice_url && (
+          <Box sx={{ mb: 3, minHeight: job.status === "completed" && invoiceUrl ? '100px' : '0px' }}>
+            {job.status === "completed" && invoiceUrl && (
               <>
                 <Divider sx={{ mb: 2 }} />
                 <Box
                   component="a"
-                  href={job.invoice_url}
+                  href={invoiceUrl}
                   target="_blank"
                   rel="noopener noreferrer"
                   sx={{

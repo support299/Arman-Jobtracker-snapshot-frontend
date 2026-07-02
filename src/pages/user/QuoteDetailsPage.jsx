@@ -95,7 +95,7 @@ const QuoteDetailsPage = () => {
 
   const [createSchedule] = useCreateScheduleMutation()
 
-  const { profile, locationId, formatPrice, isReady, isLoading: isBrandingLoading } = useAccountBranding({ quote })
+  const { profile, locationId, accountInfo, formatPrice, isReady, isLoading: isBrandingLoading } = useAccountBranding({ quote })
   const termsCompanyLabel = (text) => {
     if (!profile.name) return ''
     return applyCompanyNameToTermsText(text, profile.name, profile.abbreviation)
@@ -141,7 +141,9 @@ const QuoteDetailsPage = () => {
     setIsScheduling(true)
     try {
       await createSchedule(payload).unwrap()
-      window.location.assign(buildBookingRedirectUrl(quote.contact, locationId))
+      window.location.assign(
+        buildBookingRedirectUrl(quote.contact, locationId, accountInfo?.booking_redirect_url),
+      )
     } catch (err) {
       // Error handled by toast notification
     } finally {

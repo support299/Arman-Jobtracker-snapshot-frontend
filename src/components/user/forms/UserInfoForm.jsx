@@ -12,12 +12,20 @@
     MenuItem,
     FormControlLabel,
     Checkbox,
+    Button,
+    Stack,
   } from '@mui/material';
-  import { LocationOn } from '@mui/icons-material';
+  import { Add, LocationOn } from '@mui/icons-material';
   import axios from 'axios';
   import { useSearchParams } from 'react-router-dom';
-  import { useGetAddressesByContactQuery, useGetInitialDataQuery, useSearchContactsQuery } from '../../../store/api/user/quoteApi';
+  import {
+    useGetAddressesByContactQuery,
+    useGetInitialDataQuery,
+    useSearchContactsQuery,
+    useCreateAddressForContactMutation,
+  } from '../../../store/api/user/quoteApi';
   import SearchableSelect from '../SearchableSelect';
+  import { ContactAddressFormDialog } from '../../contacts/ContactAddressFormDialog';
 
   // PlacesAutocomplete in plain JSX
   const PlacesAutocomplete = ({ value, onSelect, error, helperText }) => {
@@ -187,6 +195,7 @@
   export const UserInfoForm = ({ data, onUpdate }) => {
     const [locations, setLocations] = useState([]);
     const [sizeRanges, setSizeRanges] = useState([]);
+    const [addAddressOpen, setAddAddressOpen] = useState(false);
     const [searchParams] = useSearchParams();
     const emailParam = searchParams.get("email");
     const hasSetQuotedByRef = useRef(false);
@@ -198,6 +207,11 @@
 
     const { data: addresses, isFetching: isFetchingAddresses } =
       useGetAddressesByContactQuery(contactId, { skip: !contactId });
+    const [createAddress, { isLoading: isCreatingAddress }] = useCreateAddressForContactMutation();
+
+    const addressList = Array.isArray(addresses)
+      ? addresses
+      : addresses?.results || addresses?.data || [];
 
     useEffect(() => {
       if (initialData) {
@@ -256,24 +270,43 @@
         userInfo: {
           ...data.userInfo,
           contactId: contact.id,
-          contactName: contact.name,
+          contact,
+          contactName: `${contact.first_name || ''} ${contact.last_name || ''}`.trim(),
           contactPhone: contact.phone,
           addressId: "",
+          selectedHouseSize: "",
+        },
+      });
+    };
+
+    const applySelectedAddress = (selected) => {
+      if (!selected) return;
+      onUpdate({
+        userInfo: {
+          ...data.userInfo,
+          addressId: selected.id,
+          selectedHouseSize: selected?.property_sqft ? String(selected.property_sqft) : "",
         },
       });
     };
 
     const handleAddressSelect = (addressId) => {
-      const selected = addresses?.find((a) => a.id === addressId);
-      if (!selected) return;
+      const selected = addressList.find(
+        (a) => String(a.id) === String(addressId),
+      );
+      applySelectedAddress(selected);
+    };
 
-      onUpdate({
-        userInfo: {
-          ...data.userInfo,
-          addressId: selected.id,
-          selectedHouseSize: selected?.property_sqft || ""
-        },
-      });
+    const handleCreateAddress = async (payload) => {
+      if (!contactId) return;
+      const created = await createAddress({ contactId, ...payload }).unwrap();
+      applySelectedAddress(created);
+    };
+
+    const formatAddressLabel = (addr) => {
+      const parts = [addr?.street_address, addr?.city, addr?.state, addr?.postal_code].filter(Boolean);
+      const line = parts.join(', ');
+      return addr?.name ? `${addr.name} — ${line}` : line || 'Address';
     };
 
     return (
@@ -301,24 +334,53 @@
           />
 
           {contactId && (
-            <Box >
+            <Box>
               {isFetchingAddresses ? (
                 <CircularProgress size={24} />
               ) : (
-                <TextField
-                  select
-                  fullWidth
-                  label="Select Address"
-                  value={data.userInfo?.addressId || ""}
-                  onChange={(e) => handleAddressSelect(e.target.value)}
-                >
-                  {addresses?.map((addr) => (
-                    <MenuItem key={addr.id} value={addr.id}>
-                      {addr?.name} — {addr?.street_address}, {addr?.city}, {addr?.state}, {addr?.postal_code}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                <Stack spacing={1.5}>
+                  <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1.5} alignItems={{ sm: 'flex-start' }}>
+                    <TextField
+                      select
+                      fullWidth
+                      label="Select Address"
+                      value={data.userInfo?.addressId || ""}
+                      onChange={(e) => handleAddressSelect(e.target.value)}
+                      helperText={
+                        addressList.length === 0
+                          ? 'No saved addresses for this contact. Add one below.'
+                          : ''
+                      }
+                    >
+                      <MenuItem value="">
+                        <em>Select an address</em>
+                      </MenuItem>
+                      {addressList.map((addr) => (
+                        <MenuItem key={addr.id} value={addr.id}>
+                          {formatAddressLabel(addr)}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                    <Button
+                      variant="outlined"
+                      startIcon={<Add />}
+                      onClick={() => setAddAddressOpen(true)}
+                      disabled={isCreatingAddress}
+                      sx={{ minWidth: { sm: 160 }, whiteSpace: 'nowrap' }}
+                    >
+                      Add address
+                    </Button>
+                  </Stack>
+                </Stack>
               )}
+
+              <ContactAddressFormDialog
+                open={addAddressOpen}
+                onClose={() => setAddAddressOpen(false)}
+                onSubmit={handleCreateAddress}
+                busy={isCreatingAddress}
+                mode="create"
+              />
             </Box>
           )}
 

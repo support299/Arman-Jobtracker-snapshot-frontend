@@ -17,6 +17,7 @@ import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import ServicesManagement from './pages/admin/ServicesManagement.jsx';
 import LocationsManagement from './pages/admin/LocationsManagement.jsx';
 import SubaccountsManagement from './pages/admin/SubaccountsManagement.jsx';
+import AccountSettings from './pages/admin/AccountSettings.jsx';
 import LocationOAuthCallback from './pages/admin/LocationOAuthCallback.jsx';
 import { BookingWizard } from './components/user/BookingWizard.jsx';
 import UserLogin from './pages/admin/userLogin.jsx';
@@ -46,6 +47,7 @@ import PayrollSettings from './pages/admin/payroll/PayrollSettings.jsx';
 import PayrollTeamManagement from './pages/admin/payroll/PayrollTeamManagement.jsx';
 import Contacts from './pages/admin/Contacts.jsx';
 import ContactDetail from './pages/admin/ContactDetail.jsx';
+import ContactProfilePage from './pages/contact/ContactProfilePage.jsx';
 import Unauthorized from './pages/admin/Unauthorized.jsx';
 import { canAccessPayrollTimeClock } from './utils/payrollAccess.js';
 import { appendLocationIdToPath } from './utils/iframeContext.js';
@@ -119,6 +121,8 @@ function App() {
                   <Route path="/quote/details/:id" element={<QuoteDetailsPage />} />
                   <Route path="/quote/original/:id" element={<OriginalProposalPage />} />
                   <Route path="/portal/contacts/:id" element={<ContactDetail />} />
+                  <Route path="/contact/jobs/:ghl_contact_id" element={<ContactProfilePage />} />
+                  <Route path="/contact/profile/:ghl_contact_id" element={<ContactProfilePage />} />
                   <Route path="/terms" element={<TermsAndConditions />} />
                   <Route path="/oauth/location-callback" element={<LocationOAuthCallback />} />
                   
@@ -206,6 +210,12 @@ function App() {
                     <Route path="locations" element={
                         <RoleProtectedRoute allowedRoles={['manager', 'supervisor']}>
                           <LocationsManagement />
+                        </RoleProtectedRoute>
+                      }
+                    />
+                    <Route path="account-settings" element={
+                        <RoleProtectedRoute allowedRoles={['manager', 'supervisor']}>
+                          <AccountSettings />
                         </RoleProtectedRoute>
                       }
                     />

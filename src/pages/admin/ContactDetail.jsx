@@ -38,6 +38,12 @@ import {
   ContactAppointmentPanel,
   ContactAddressPanel,
 } from '../../components/admin/contacts/ContactMiscPanels';
+import { ContactAddressFormDialog } from '../../components/contacts/ContactAddressFormDialog';
+import {
+  useCreateContactAddressMutation,
+  useDeleteContactAddressMutation,
+  useUpdateContactAddressMutation,
+} from '../../store/api/contactProfileApi';
 import { ContactPickRow } from '../../components/admin/contacts/ContactPickRow';
 import { contactsPageSx, portalInviteSx, PORTAL_INSIGHT_AVATAR_GRADIENTS } from './contactsTheme';
 import { exportInvoicesToCsv } from '../../utils/exportInvoicesCsv';
@@ -103,8 +109,15 @@ const ContactDetail = () => {
   const [selInvoice, setSelInvoice] = useState(null);
   const [selAppt, setSelAppt] = useState(null);
   const [selAddr, setSelAddr] = useState(null);
+  const [addrDialogOpen, setAddrDialogOpen] = useState(false);
+  const [addrDialogMode, setAddrDialogMode] = useState('create');
+  const [editingAddr, setEditingAddr] = useState(null);
 
-  const { data, isLoading, error } = useGetDashboardContactByIdQuery(contactKey, { skip: contactKey == null });
+  const [createAddress, { isLoading: creatingAddr }] = useCreateContactAddressMutation();
+  const [updateAddress, { isLoading: updatingAddr }] = useUpdateContactAddressMutation();
+  const [deleteAddress, { isLoading: deletingAddr }] = useDeleteContactAddressMutation();
+
+  const { data, isLoading, error, refetch } = useGetDashboardContactByIdQuery(contactKey, { skip: contactKey == null });
 
   useEffect(() => {
     setSelJob(null);
@@ -171,6 +184,24 @@ const ContactDetail = () => {
   const invoices = data.invoices || [];
   const appointments = data.appointments || [];
   const addresses = data.addresses || [];
+  const ghlContactId = data.contact_id;
+
+  const handleSaveAddress = async (payload) => {
+    if (!ghlContactId) return;
+    if (addrDialogMode === 'edit' && editingAddr?.id) {
+      await updateAddress({ ghlContactId, addressId: editingAddr.id, ...payload }).unwrap();
+    } else {
+      await createAddress({ ghlContactId, ...payload }).unwrap();
+    }
+    refetch();
+  };
+
+  const handleDeleteAddress = async (addr) => {
+    if (!ghlContactId || !addr?.id) return;
+    if (!window.confirm(`Remove "${addr.name || 'this property'}"?`)) return;
+    await deleteAddress({ ghlContactId, addressId: addr.id }).unwrap();
+    refetch();
+  };
 
   return (
     <Box marginTop={2} sx={(t) => ({ ...(isPortal ? portalInviteSx.pageBg(t) : contactsPageSx.canvas(t)), ...contactsPageSx.shell })}>
@@ -652,28 +683,81 @@ const ContactDetail = () => {
           )}
 
           {tab === 6 && (
-            <ContactActivitySplit
-              invitePortal={isPortal}
-              items={addresses}
-              getKey={(addr) => addr.id}
-              selectedId={selAddr}
-              onSelect={setSelAddr}
-              emptyList="No addresses on file."
-              selectHint="Select an address to view formatted location details."
-              drawerTitle="Address"
-              renderListItem={(addr, active) => (
-                <ContactPickRow key={addr.id} active={active} onClick={() => setSelAddr(addr.id)}>
-                  <Typography fontWeight={700}>{addr.name || 'Address'}</Typography>
-                  <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                    {addr.city}, {addr.state} {addr.postal_code || ''}
-                  </Typography>
-                </ContactPickRow>
-              )}
-              renderDetail={(addr) => <ContactAddressPanel addr={addr} />}
-            />
+            <>
+              <Stack direction="row" justifyContent="flex-end" spacing={1} sx={{ mb: 2 }}>
+                <Button
+                  size="small"
+                  variant="outlined"
+                  onClick={() => {
+                    setAddrDialogMode('create');
+                    setEditingAddr(null);
+                    setAddrDialogOpen(true);
+                  }}
+                >
+                  Add property
+                </Button>
+                {selAddr && (
+                  <>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      onClick={() => {
+                        const addr = addresses.find((a) => a.id === selAddr);
+                        if (!addr) return;
+                        setAddrDialogMode('edit');
+                        setEditingAddr(addr);
+                        setAddrDialogOpen(true);
+                      }}
+                    >
+                      Edit
+                    </Button>
+                    <Button
+                      size="small"
+                      color="error"
+                      variant="outlined"
+                      disabled={deletingAddr}
+                      onClick={() => {
+                        const addr = addresses.find((a) => a.id === selAddr);
+                        if (addr) handleDeleteAddress(addr);
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </>
+                )}
+              </Stack>
+              <ContactActivitySplit
+                invitePortal={isPortal}
+                items={addresses}
+                getKey={(addr) => addr.id}
+                selectedId={selAddr}
+                onSelect={setSelAddr}
+                emptyList="No properties on file. Add addresses in-app — they are no longer synced from GoHighLevel."
+                selectHint="Select a property to view formatted location details."
+                drawerTitle="Property"
+                renderListItem={(addr, active) => (
+                  <ContactPickRow key={addr.id} active={active} onClick={() => setSelAddr(addr.id)}>
+                    <Typography fontWeight={700}>{addr.name || 'Property'}</Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+                      {addr.city}, {addr.state} {addr.postal_code || ''}
+                    </Typography>
+                  </ContactPickRow>
+                )}
+                renderDetail={(addr) => <ContactAddressPanel addr={addr} />}
+              />
+            </>
           )}
         </Box>
       </Paper>
+
+      <ContactAddressFormDialog
+        open={addrDialogOpen}
+        onClose={() => setAddrDialogOpen(false)}
+        onSubmit={handleSaveAddress}
+        initialValues={editingAddr}
+        busy={creatingAddr || updatingAddr}
+        mode={addrDialogMode}
+      />
     </Box>
   );
 };
