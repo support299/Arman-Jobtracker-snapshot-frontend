@@ -102,7 +102,7 @@ const PayrollTimeClockRoute = () => {
     return null;
   }
 
-  if (!canAccessPayrollTimeClock(user?.role, userProfile)) {
+  if (!canAccessPayrollTimeClock(user?.role, userProfile, user)) {
     return <Navigate to={appendLocationIdToPath('/admin/payroll/reports')} replace />;
   }
 

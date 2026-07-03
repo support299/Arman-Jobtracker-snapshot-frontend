@@ -68,7 +68,7 @@ const TimeClock = () => {
   const completedEntries = todayEntries?.entries?.filter((entry) => entry.status === 'checked_out') || [];
 
   // Admin/supervisor: manage any employee. Manager/worker: own clock-in only (worker UI).
-  const canManageOthersTimeClock = canAccessPayrollAdminSections(user?.role);
+  const canManageOthersTimeClock = canAccessPayrollAdminSections(user?.role, user);
 
   const navigate = useNavigate();
 
@@ -78,7 +78,7 @@ const TimeClock = () => {
       return;
     }
 
-    if (!canAccessPayrollTimeClock(user?.role, user_profile)) {
+    if (!canAccessPayrollTimeClock(user?.role, user_profile, user)) {
       navigate('/admin/payroll/reports', { replace: true });
     }
   }, [navigate, normalizedRole, user, user_profile]);

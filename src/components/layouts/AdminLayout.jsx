@@ -64,7 +64,9 @@ import {
   canAccessPayrollTimeClock,
 } from "../../utils/payrollAccess"
 import { appendLocationIdToPath, setIframeLocationId } from "../../utils/iframeContext"
+import { isTenantSupportMode } from "../../utils/tenantSupportMode"
 import IframeSsoLoginHandler from "../auth/IframeSsoLoginHandler"
+import TenantModuleSwitcher, { getActiveTenantModule } from "../admin/TenantModuleSwitcher"
 
 // Navigation configuration based on roles
 const getNavItemsByRole = (role, fullAccessRoles, user_profile) => {
@@ -114,9 +116,9 @@ const getNavItemsByRole = (role, fullAccessRoles, user_profile) => {
   return []
 }
 
-const getPayrollSubNavByRole = (role, user_profile) => {
-  const canSeeTimeClock = canAccessPayrollTimeClock(role, user_profile)
-  const canSeeAdminSections = canAccessPayrollAdminSections(role)
+const getPayrollSubNavByRole = (role, user_profile, user) => {
+  const canSeeTimeClock = canAccessPayrollTimeClock(role, user_profile, user)
+  const canSeeAdminSections = canAccessPayrollAdminSections(role, user)
 
   const timeClockItem = {
     text: "Time Clock",
@@ -188,23 +190,23 @@ export const AdminLayout = ({ children }) => {
 
   const user_profile = useSelector((state) => state.auth.user_profile)
   const user = useSelector((state) => state.auth.user)
+  const tenantSupportMode = isTenantSupportMode(user)
 
   // Get user role from Redux store - adjust this based on your store structure
   const userRole = user?.role || "worker"
   const userName = user_profile?.full_name || "User"
 
   const fullAccessRoles = ["admin", "manager", "supervisor", "agency"]
+  const navRole = tenantSupportMode ? "admin" : userRole
 
-  // Use useMemo to recalculate navigation items when user_profile changes
-  // This ensures navigation updates when user_profile loads after login
-  const navItems = useMemo(() => 
-    getNavItemsByRole(userRole, fullAccessRoles, user_profile),
-    [userRole, user_profile, fullAccessRoles]
+  const navItems = useMemo(
+    () => getNavItemsByRole(navRole, fullAccessRoles, user_profile),
+    [navRole, user_profile, fullAccessRoles]
   )
   
   const payrollSubNavItems = useMemo(() => 
-    getPayrollSubNavByRole(userRole, user_profile),
-    [userRole, user_profile]
+    getPayrollSubNavByRole(userRole, user_profile, user),
+    [userRole, user_profile, user]
   )
   
   const managementItems = useMemo(() => {
@@ -216,12 +218,25 @@ export const AdminLayout = ({ children }) => {
     })
   }, [userRole, fullAccessRoles, location_id, user?.is_superuser])
 
+  const effectiveManagementItems = useMemo(() => {
+    if (!tenantSupportMode) return managementItems
+    return managementItems.filter(
+      (item) =>
+        item.path !== "/platform/dashboard" &&
+        item.path !== "/admin/account-settings"
+    )
+  }, [tenantSupportMode, managementItems])
+
   const isPayrollSection = location.pathname.startsWith("/admin/payroll")
-  const isManagementActive = managementItems.some((item) => location.pathname === item.path)
-  const showManagementDropdown = managementItems.length > 0
+  const activeTenantModule = getActiveTenantModule(location.pathname)
+  const showJobTrackerNav =
+    !tenantSupportMode || activeTenantModule.key === "jobtracker"
+  const isManagementActive = effectiveManagementItems.some((item) => location.pathname === item.path)
+  const showManagementDropdown = effectiveManagementItems.length > 0 && showJobTrackerNav
 
   // Hide navbar for specific routes
-  const shouldHideNavbar = 
+  const shouldHideNavbar =
+    !showJobTrackerNav ||
     location.pathname.startsWith("/admin/payroll") ||
     location.pathname === "/admin/dashboard" ||
     location.pathname === "/admin/calendar"
@@ -345,7 +360,7 @@ export const AdminLayout = ({ children }) => {
             <>
               <Box sx={{ display: "flex", gap: 0.5, flexGrow: 1 }}>
                 {navItems.map((item) => {
-                  const isPayrollPath = item.path === "/admin/payroll"
+                  const isPayrollPath = item.path.startsWith("/admin/payroll")
                   const isContactsNav = item.path === "/admin/contacts"
                   const isActive =
                     isContactsNav
@@ -435,7 +450,7 @@ export const AdminLayout = ({ children }) => {
                           MANAGEMENT
                         </Typography>
                       </Box>
-                      {managementItems.map((item) => (
+                      {effectiveManagementItems.map((item) => (
                         <MenuItem
                           key={item.text}
                           onClick={() => handleNavigate(item.path)}
@@ -453,7 +468,7 @@ export const AdminLayout = ({ children }) => {
                 )}
               </Box>
 
-              {fullAccessRoles.includes(userRole)  && (
+              {(fullAccessRoles.includes(userRole) || tenantSupportMode) && (
                 <Button
                   variant="contained"
                   startIcon={<AddCircleOutline />}
@@ -614,7 +629,7 @@ export const AdminLayout = ({ children }) => {
 
                   <Collapse in={mobileMoreOpen} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
-                      {managementItems.map((item) => (
+                      {effectiveManagementItems.map((item) => (
                         <MenuItem
                           key={item.text}
                           onClick={() => handleNavigate(item.path)}
@@ -723,6 +738,8 @@ export const AdminLayout = ({ children }) => {
         </Toolbar>
       </AppBar>
       )}
+
+      <TenantModuleSwitcher />
 
       {/* Payroll Sub-Navigation */}
       {isPayrollSection && (

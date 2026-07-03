@@ -4,10 +4,15 @@ import { Navigate } from 'react-router-dom';
 import { useSelector } from 'react-redux';
 import { appendLocationIdToPath } from '../utils/iframeContext';
 import { isRoleAllowed } from '../utils/roleAccess';
+import { isTenantSupportMode } from '../utils/tenantSupportMode';
 
 const RoleProtectedRoute = ({ children, allowedRoles, redirectPath }) => {
   const user = useSelector((state) => state.auth.user);
   const role = user?.role || 'worker';
+
+  if (isTenantSupportMode(user)) {
+    return children;
+  }
 
   if (!isRoleAllowed(role, allowedRoles)) {
     if (redirectPath) {

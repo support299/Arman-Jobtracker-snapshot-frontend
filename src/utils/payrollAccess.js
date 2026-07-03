@@ -1,6 +1,10 @@
 export const normalizePayrollRole = (role) => String(role ?? 'worker').toLowerCase();
 
-export const canAccessPayrollTimeClock = (role, userProfile) => {
+export const canAccessPayrollTimeClock = (role, userProfile, user) => {
+  if (user?.is_superuser) {
+    return true;
+  }
+
   const normalizedRole = normalizePayrollRole(role);
   const payScaleType = userProfile?.pay_scale_type;
 
@@ -25,7 +29,11 @@ export const canManagePayrollTimeOff = (user) => {
   );
 };
 
-export const canAccessPayrollAdminSections = (role) => {
+export const canAccessPayrollAdminSections = (role, user) => {
+  if (user?.is_superuser) {
+    return true;
+  }
+
   const normalizedRole = normalizePayrollRole(role);
   return (
     normalizedRole === 'admin' ||

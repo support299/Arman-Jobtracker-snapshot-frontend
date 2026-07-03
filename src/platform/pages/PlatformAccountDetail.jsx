@@ -2,7 +2,7 @@ import { useState } from "react"
 import { Link, useParams } from "react-router-dom"
 import {
   ArrowLeft,
-  ExternalLink,
+  ChevronDown,
   RefreshCw,
   Save,
   Shield,
@@ -21,25 +21,25 @@ import PageHeader from "../components/PageHeader"
 import StatusBadge from "../components/StatusBadge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
 import { formatDateTime, formatRelative, platformStatusLabel } from "../utils/formatters"
+import { TENANT_OPEN_DESTINATIONS } from "../../utils/tenantSupportMode"
+import PlatformAccountSettingsPanel from "../components/PlatformAccountSettingsPanel"
+import PlatformAccountTeamPanel from "../components/PlatformAccountTeamPanel"
 
 const MANUAL_ACTIONS = [
   { key: "sync-contacts", label: "Sync Contacts", description: "Queue full contact sync from GHL" },
@@ -72,13 +72,9 @@ export default function PlatformAccountDetail() {
     try {
       await updateAccount({
         id,
-        company_name: current.company_name,
-        timezone: current.timezone,
         is_active: current.is_active,
         platform_status: current.platform_status,
         internal_notes: current.internal_notes,
-        booking_redirect_url: current.booking_redirect_url,
-        invoice_link_base_url: current.invoice_link_base_url,
       }).unwrap()
       setForm(null)
       toast.success("Account updated")
@@ -107,9 +103,9 @@ export default function PlatformAccountDetail() {
     }
   }
 
-  const handleImpersonate = async () => {
+  const handleImpersonate = async (redirectPath = "/admin/jobs") => {
     try {
-      const result = await impersonate({ id }).unwrap()
+      const result = await impersonate({ id, redirect_path: redirectPath }).unwrap()
       window.open(result.redirect_url, "_blank", "noopener,noreferrer")
       toast.success("Opening tenant in support mode")
     } catch (err) {
@@ -150,23 +146,29 @@ export default function PlatformAccountDetail() {
         actions={
           <>
             <Button variant="outline" onClick={() => refetch()}><RefreshCw className="mr-2 h-4 w-4" />Refresh</Button>
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button><Shield className="mr-2 h-4 w-4" />Open as tenant</Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Open in support mode?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This opens the tenant application scoped to this location. The action will be recorded in the audit log.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={handleImpersonate}>Open tenant</AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button>
+                  <Shield className="mr-2 h-4 w-4" />
+                  Open as tenant
+                  <ChevronDown className="ml-2 h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-72">
+                <DropdownMenuLabel>Open tenant app</DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                {TENANT_OPEN_DESTINATIONS.map((destination) => (
+                  <DropdownMenuItem
+                    key={destination.key}
+                    onClick={() => handleImpersonate(destination.path)}
+                    className="flex flex-col items-start gap-0.5 py-2"
+                  >
+                    <span className="font-medium">{destination.label}</span>
+                    <span className="text-xs text-muted-foreground">{destination.description}</span>
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
           </>
         }
       />
@@ -187,19 +189,19 @@ export default function PlatformAccountDetail() {
         </Alert>
       )}
 
+      <Tabs defaultValue="platform" className="space-y-6">
+        <TabsList className="h-auto flex-wrap justify-start">
+          <TabsTrigger value="platform">Platform admin</TabsTrigger>
+          <TabsTrigger value="settings">Location & settings</TabsTrigger>
+          <TabsTrigger value="team">Team</TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="platform" className="mt-0">
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           <Card>
-            <CardHeader><CardTitle className="text-base">Account settings</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-base">Platform controls</CardTitle></CardHeader>
             <CardContent className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label>Company name</Label>
-                <Input value={current?.company_name || ""} onChange={(e) => setField("company_name", e.target.value)} />
-              </div>
-              <div className="space-y-2">
-                <Label>Timezone</Label>
-                <Input value={current?.timezone || ""} onChange={(e) => setField("timezone", e.target.value)} />
-              </div>
               <div className="space-y-2">
                 <Label>Platform status</Label>
                 <Select value={current?.platform_status || "active"} onValueChange={(v) => setField("platform_status", v)}>
@@ -220,20 +222,12 @@ export default function PlatformAccountDetail() {
                 <Switch checked={!!current?.is_active} onCheckedChange={(v) => setField("is_active", v)} />
               </div>
               <div className="space-y-2 sm:col-span-2">
-                <Label>Booking redirect URL</Label>
-                <Input value={current?.booking_redirect_url || ""} onChange={(e) => setField("booking_redirect_url", e.target.value)} />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
-                <Label>Invoice link base URL</Label>
-                <Input value={current?.invoice_link_base_url || ""} onChange={(e) => setField("invoice_link_base_url", e.target.value)} />
-              </div>
-              <div className="space-y-2 sm:col-span-2">
                 <Label>Internal notes</Label>
                 <Textarea rows={4} value={current?.internal_notes || ""} onChange={(e) => setField("internal_notes", e.target.value)} />
               </div>
               <div className="sm:col-span-2">
                 <Button onClick={handleSave} disabled={saving || !form}>
-                  <Save className="mr-2 h-4 w-4" />Save changes
+                  <Save className="mr-2 h-4 w-4" />Save platform settings
                 </Button>
               </div>
             </CardContent>
@@ -333,6 +327,16 @@ export default function PlatformAccountDetail() {
           </Card>
         </div>
       </div>
+        </TabsContent>
+
+        <TabsContent value="settings" className="mt-0">
+          <PlatformAccountSettingsPanel accountId={id} />
+        </TabsContent>
+
+        <TabsContent value="team" className="mt-0">
+          <PlatformAccountTeamPanel accountId={id} />
+        </TabsContent>
+      </Tabs>
     </div>
   )
 }

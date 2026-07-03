@@ -26,7 +26,7 @@ export default function PlatformHealth() {
     <div>
       <PageHeader
         title="Platform Health"
-        description="OAuth validity, sync status, and configuration warnings across all active accounts."
+        description="Sync status, onboarding setup, and configuration warnings across all active accounts."
       />
 
       {summary.critical > 0 && (
@@ -42,7 +42,7 @@ export default function PlatformHealth() {
         <MetricCard title="Warning" value={summary.warning} loading={isLoading} />
         <MetricCard title="Critical" value={summary.critical} loading={isLoading} />
         <MetricCard title="Inactive" value={summary.inactive} loading={isLoading} />
-        <MetricCard title="Expiring tokens" value={summary.expiring_tokens} loading={isLoading} />
+        <MetricCard title="Setup incomplete" value={summary.setup_incomplete} loading={isLoading} />
       </div>
 
       <Card className="mb-4 p-4">
@@ -103,7 +103,7 @@ export default function PlatformHealth() {
                         <span className="text-sm text-muted-foreground">None</span>
                       ) : (
                         <ul className="list-disc pl-4 text-xs text-muted-foreground">
-                          {row.warnings.slice(0, 3).map((w) => <li key={w}>{w}</li>)}
+                          {row.warnings.map((w) => <li key={w}>{w}</li>)}
                         </ul>
                       )}
                     </TableCell>

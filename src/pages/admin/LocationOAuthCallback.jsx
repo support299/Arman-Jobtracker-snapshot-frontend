@@ -6,7 +6,7 @@ import { Box, CircularProgress, Typography, Alert, Button } from "@mui/material"
 import { axiosInstance, BASE_URL } from "../../store/axios/axios"
 
 const REDIRECT_PATH =
-  import.meta.env.VITE_GHL_LOCATION_CONNECT_REDIRECT_PATH || "/oauth/location-callback"
+  import.meta.env.VITE_GHL_LOCATION_CONNECT_REDIRECT_PATH || "/api/accounts/auth/callback/"
 
 const LocationOAuthCallback = () => {
   const [searchParams] = useSearchParams()

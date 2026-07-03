@@ -82,13 +82,13 @@ export default function PlatformDashboard() {
         }
       />
 
-      {(oauth.critical > 0 || oauth.expiring_tokens > 0) && (
+      {(oauth.critical > 0 || oauth.setup_incomplete > 0) && (
         <Alert className="mb-6 border-amber-200 bg-amber-50">
           <AlertTriangle className="h-4 w-4 text-amber-600" />
           <AlertTitle className="text-amber-900">Attention required</AlertTitle>
           <AlertDescription className="text-amber-800">
             {oauth.critical > 0 && `${oauth.critical} account(s) in critical state. `}
-            {oauth.expiring_tokens > 0 && `${oauth.expiring_tokens} token(s) expiring soon.`}
+            {oauth.setup_incomplete > 0 && `${oauth.setup_incomplete} account(s) need setup (logo, URLs, timezone, etc.).`}
           </AlertDescription>
         </Alert>
       )}
@@ -158,7 +158,7 @@ export default function PlatformDashboard() {
           <CardContent className="space-y-3 text-sm">
             <div className="flex justify-between"><span className="text-muted-foreground">Companies</span><span className="font-medium">{data?.companies ?? "—"}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Locations</span><span className="font-medium">{data?.locations ?? "—"}</span></div>
-            <div className="flex justify-between"><span className="text-muted-foreground">Expiring tokens</span><span className="font-medium">{oauth.expiring_tokens ?? 0}</span></div>
+            <div className="flex justify-between"><span className="text-muted-foreground">Setup incomplete</span><span className="font-medium">{oauth.setup_incomplete ?? 0}</span></div>
             <div className="flex justify-between"><span className="text-muted-foreground">Accounts checked</span><span className="font-medium">{oauth.total_checked ?? 0}</span></div>
           </CardContent>
         </Card>

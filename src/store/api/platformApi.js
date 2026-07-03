@@ -28,6 +28,69 @@ export const platformApi = createApi({
       query: (id) => ({ url: `accounts/${id}/calendars/` }),
       providesTags: (result, error, id) => [{ type: 'PlatformAccount', id: `${id}-calendars` }],
     }),
+    getPlatformAccountSettings: builder.query({
+      query: (id) => ({ url: `accounts/${id}/settings/` }),
+      providesTags: (result, error, id) => [{ type: 'PlatformAccount', id: `${id}-settings` }],
+    }),
+    getPlatformAccountTeam: builder.query({
+      query: ({ id, ...params }) => ({ url: `accounts/${id}/team/`, params }),
+      providesTags: (result, error, { id }) => [{ type: 'PlatformAccount', id: `${id}-team` }],
+    }),
+    updatePlatformAccountSettings: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `accounts/${id}/settings/`,
+        method: 'PATCH',
+        data: body,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'PlatformAccount', id: `${id}-settings` },
+        { type: 'PlatformAccount', id },
+      ],
+    }),
+    uploadPlatformAccountLogo: builder.mutation({
+      query: ({ id, formData }) => ({
+        url: `accounts/${id}/settings/`,
+        method: 'PATCH',
+        data: formData,
+      }),
+      invalidatesTags: (result, error, { id }) => [
+        { type: 'PlatformAccount', id: `${id}-settings` },
+        { type: 'PlatformAccount', id },
+      ],
+    }),
+    refreshPlatformAccountCalendars: builder.mutation({
+      query: (id) => ({
+        url: `accounts/${id}/settings/refresh-calendars/`,
+        method: 'POST',
+      }),
+      invalidatesTags: (result, error, id) => [
+        { type: 'PlatformAccount', id: `${id}-settings` },
+        { type: 'PlatformAccount', id },
+      ],
+    }),
+    createPlatformTeamMember: builder.mutation({
+      query: ({ id, ...body }) => ({
+        url: `accounts/${id}/team/`,
+        method: 'POST',
+        data: body,
+      }),
+      invalidatesTags: (result, error, { id }) => [{ type: 'PlatformAccount', id: `${id}-team` }],
+    }),
+    updatePlatformTeamMember: builder.mutation({
+      query: ({ accountId, userId, ...body }) => ({
+        url: `accounts/${accountId}/team/${userId}/`,
+        method: 'PATCH',
+        data: body,
+      }),
+      invalidatesTags: (result, error, { accountId }) => [{ type: 'PlatformAccount', id: `${accountId}-team` }],
+    }),
+    deletePlatformTeamMember: builder.mutation({
+      query: ({ accountId, userId }) => ({
+        url: `accounts/${accountId}/team/${userId}/`,
+        method: 'DELETE',
+      }),
+      invalidatesTags: (result, error, { accountId }) => [{ type: 'PlatformAccount', id: `${accountId}-team` }],
+    }),
     updatePlatformAccount: builder.mutation({
       query: ({ id, ...body }) => ({
         url: `accounts/${id}/`,
@@ -109,6 +172,14 @@ export const {
   useGetPlatformAccountsQuery,
   useGetPlatformAccountQuery,
   useGetPlatformAccountCalendarsQuery,
+  useGetPlatformAccountSettingsQuery,
+  useGetPlatformAccountTeamQuery,
+  useUpdatePlatformAccountSettingsMutation,
+  useUploadPlatformAccountLogoMutation,
+  useRefreshPlatformAccountCalendarsMutation,
+  useCreatePlatformTeamMemberMutation,
+  useUpdatePlatformTeamMemberMutation,
+  useDeletePlatformTeamMemberMutation,
   useUpdatePlatformAccountMutation,
   useRunPlatformAccountActionMutation,
   useRunPlatformHealthCheckMutation,

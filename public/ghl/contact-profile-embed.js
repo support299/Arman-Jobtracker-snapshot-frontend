@@ -3,6 +3,7 @@
  *
  * Paste into GHL: Settings → Company → Custom JS/CSS (or subaccount custom code).
  * Works for every onboarded location — location_id is read from the GHL URL.
+ * The button is shown only when /api/quote/account-info/ confirms the location is onboarded.
  *
  * Configure APP_BASE_URL to your deployed frontend origin (no trailing slash).
  */
@@ -10,10 +11,71 @@
   'use strict';
 
   var APP_BASE_URL = 'https://snapshot.theservicepilot.com';
+  var API_BASE_URL = APP_BASE_URL + '/api';
+  var ONBOARD_CACHE_PREFIX = 'sp_location_onboarded_';
+  var ONBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
   var TARGET_SELECTOR =
     '#record-details-new-ui > div > div > div > div.h-full.transition-all.duration-300.shrink-0.right-sidebar-container > div > nav > div.flex.flex-col.items-center.gap-2.rounded-lg';
   var BUTTON_ID = 'sp-contact-profile-button';
   var POPUP_ID = 'sp-contact-profile-popup';
+  var onboardCheckToken = 0;
+
+  function readOnboardCache(locationId) {
+    try {
+      var raw = sessionStorage.getItem(ONBOARD_CACHE_PREFIX + locationId);
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || Date.now() - parsed.at > ONBOARD_CACHE_TTL_MS) return null;
+      return !!parsed.onboarded;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function writeOnboardCache(locationId, onboarded) {
+    try {
+      sessionStorage.setItem(
+        ONBOARD_CACHE_PREFIX + locationId,
+        JSON.stringify({ onboarded: !!onboarded, at: Date.now() })
+      );
+    } catch (error) {
+      // ignore storage errors
+    }
+  }
+
+  function isLocationOnboarded(locationId, callback) {
+    if (!locationId) {
+      callback(false);
+      return;
+    }
+
+    var cached = readOnboardCache(locationId);
+    if (cached !== null) {
+      callback(cached);
+      return;
+    }
+
+    var url =
+      API_BASE_URL +
+      '/quote/account-info/?location_id=' +
+      encodeURIComponent(locationId);
+
+    fetch(url, { method: 'GET', credentials: 'omit' })
+      .then(function (response) {
+        var onboarded = response.ok;
+        writeOnboardCache(locationId, onboarded);
+        callback(onboarded);
+      })
+      .catch(function () {
+        writeOnboardCache(locationId, false);
+        callback(false);
+      });
+  }
+
+  function removeCustomButton() {
+    var existing = document.getElementById(BUTTON_ID);
+    if (existing) existing.remove();
+  }
 
   function extractLocationId() {
     var match = window.location.pathname.match(/\/location\/([^/]+)\//);
@@ -144,8 +206,28 @@
   }
 
   function checkAndAddButton() {
-    if (!isContactDetailPage()) return;
-    if (isTargetElementVisible()) addCustomButton();
+    if (!isContactDetailPage()) {
+      removeCustomButton();
+      return;
+    }
+
+    var locationId = extractLocationId();
+    if (!locationId) {
+      removeCustomButton();
+      return;
+    }
+
+    var checkId = ++onboardCheckToken;
+    isLocationOnboarded(locationId, function (onboarded) {
+      if (checkId !== onboardCheckToken) return;
+
+      if (!onboarded) {
+        removeCustomButton();
+        return;
+      }
+
+      if (isTargetElementVisible()) addCustomButton();
+    });
   }
 
   function setupObserver() {
@@ -160,7 +242,7 @@
       attributes: true,
       attributeFilter: ['style', 'class'],
     });
-    console.log('[ServicePilot] Contact profile button loaded (multi-location)');
+    console.log('[ServicePilot] Contact profile button loaded (onboarded locations only)');
   }
 
   document.addEventListener('click', function (event) {

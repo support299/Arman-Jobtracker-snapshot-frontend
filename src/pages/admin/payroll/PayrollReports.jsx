@@ -65,7 +65,7 @@ function formatYmd(date) {
 const PayrollReports = () => {
   const user = useSelector((state) => state.auth.user);
   const userRole = user?.role || 'worker';
-  const canEditDelete = canAccessPayrollAdminSections(userRole);
+  const canEditDelete = canAccessPayrollAdminSections(userRole, user);
 
   // Default date range: month-to-date (first day of this month – today).
   const getDefaultDateRange = () => {

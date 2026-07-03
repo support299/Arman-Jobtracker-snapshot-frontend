@@ -17,6 +17,7 @@ import { useDispatch } from "react-redux"
 import { resetBookingData } from "../../store/slices/bookingSlice"
 import { Box, Typography, Card, CardContent } from "@mui/material"
 import PoweredBy from "../PoweredBy"
+import TenantModuleSwitcher from "../admin/TenantModuleSwitcher"
 import { resolveBrandingLocationId, useAccountBranding } from "../../hooks/useAccountBranding"
 
 import SignatureCanvas from "react-signature-canvas";
@@ -685,6 +686,7 @@ export const BookingWizard = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 relative">
+      <TenantModuleSwitcher />
       {/* Header */}
       <div className="bg-white border-b border-gray-200 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">

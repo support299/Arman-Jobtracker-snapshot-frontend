@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import {
   Box,
   Card,
@@ -18,40 +18,46 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { loginUser, clearSuccess } from '../../store/slices/authSlice';
 import { useUrlSsoLogin } from '../../hooks/useUrlSsoLogin';
 import { friendlySsoErrorMessage } from '../../utils/urlSsoLogin';
-import {
-  appendLocationIdToPath,
-  getIframeLocationId,
-} from '../../utils/iframeContext';
+import { getIframeLocationId } from '../../utils/iframeContext';
+import { getPostLoginRedirectPath, resolvePostLoginNavigation } from '../../utils/postLoginRedirect';
 
 const UserLogin = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const { loading, error } = useSelector((state) => state.auth);
+  const { loading, error, user, access } = useSelector((state) => state.auth);
   const [searchParams] = useSearchParams();
   const email = searchParams.get('email');
   const locationId = searchParams.get('location_id');
 
-  const defaultRedirectPath = (userRole) => {
-    if (userRole === 'admin' || userRole === 'manager') {
-      return appendLocationIdToPath('/admin/dashboard');
-    }
-    return appendLocationIdToPath('/admin/jobs');
-  };
+  useEffect(() => {
+    if (!access || !user) return;
+    const returnTo = localStorage.getItem('returnTo');
+    if (returnTo) return;
+
+    navigate(
+      getPostLoginRedirectPath({ user, userRole: user.role, locationId }),
+      { replace: true },
+    );
+  }, [access, user, navigate, locationId]);
 
   const finishLoginNavigation = useCallback(
     (response) => {
       const returnTo = localStorage.getItem('returnTo');
       if (returnTo) {
         localStorage.removeItem('returnTo');
-        dispatch(clearSuccess());
-        navigate(appendLocationIdToPath(returnTo), { replace: true });
-        return;
       }
-      const userRole = response?.user?.role || 'worker';
       dispatch(clearSuccess());
-      navigate(defaultRedirectPath(userRole), { replace: true });
+      navigate(
+        resolvePostLoginNavigation({
+          user: response?.user,
+          userRole: response?.user?.role,
+          locationId,
+          returnTo,
+        }),
+        { replace: true },
+      );
     },
-    [dispatch, navigate],
+    [dispatch, navigate, locationId],
   );
 
   const { switching, ssoError, loading: ssoLoading } = useUrlSsoLogin({
@@ -71,6 +77,9 @@ const UserLogin = () => {
     onSubmit: async (values) => {
       try {
         const returnTo = localStorage.getItem('returnTo');
+        if (returnTo) {
+          localStorage.removeItem('returnTo');
+        }
 
         const response = await dispatch(
           loginUser({
@@ -79,15 +88,16 @@ const UserLogin = () => {
           }),
         ).unwrap();
 
-        if (returnTo) {
-          localStorage.removeItem('returnTo');
-          dispatch(clearSuccess());
-          navigate(appendLocationIdToPath(returnTo), { replace: true });
-        } else {
-          const userRole = response?.user?.role || 'worker';
-          dispatch(clearSuccess());
-          navigate(defaultRedirectPath(userRole), { replace: true });
-        }
+        dispatch(clearSuccess());
+        navigate(
+          resolvePostLoginNavigation({
+            user: response?.user,
+            userRole: response?.user?.role,
+            locationId,
+            returnTo,
+          }),
+          { replace: true },
+        );
       } catch {
         // Error is handled by Redux state
       }
