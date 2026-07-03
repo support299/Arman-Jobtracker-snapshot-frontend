@@ -1,12 +1,13 @@
 import { Box } from '@mui/material';
 import { useAccountBranding } from '../hooks/useAccountBranding';
+import { DEFAULT_SERVICE_COMPANY_LOGO, resolveCompanyLogoUrl } from '../utils/companyProfile';
 import CompanyLogoPlaceholder from './CompanyLogoPlaceholder';
 
 const CompanyLogo = ({
   locationId,
   quote,
   alt,
-  fallbackSrc,
+  fallbackSrc = DEFAULT_SERVICE_COMPANY_LOGO,
   sx = {},
   className,
   style,
@@ -26,17 +27,7 @@ const CompanyLogo = ({
     );
   }
 
-  const logoSrc = profile.logoUrl || fallbackSrc;
-  if (!logoSrc) {
-    return (
-      <CompanyLogoPlaceholder
-        className={className}
-        maxHeight={maxHeight}
-        maxWidth={maxWidth}
-        sx={sx}
-      />
-    );
-  }
+  const logoSrc = resolveCompanyLogoUrl(profile.logoUrl || fallbackSrc);
 
   return (
     <Box

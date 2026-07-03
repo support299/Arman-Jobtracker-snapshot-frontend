@@ -12,6 +12,18 @@ const LOCATION_ABBREVIATIONS = {
 const DEFAULT_LOGO =
   'https://storage.googleapis.com/msgsndr/b8qvo7VooP3JD3dIZU42/media/683efc8fd5817643ff8194f0.jpeg';
 
+/** Fallback logo when a subaccount has not uploaded branding yet. */
+export const DEFAULT_SERVICE_COMPANY_LOGO =
+  import.meta.env.VITE_DEFAULT_COMPANY_LOGO_URL ||
+  import.meta.env.VITE_COMPANY_LOGO_URL ||
+  DEFAULT_LOGO ||
+  '/placeholder.svg';
+
+export function resolveCompanyLogoUrl(logoUrl) {
+  const custom = logoUrl != null ? String(logoUrl).trim() : '';
+  return custom || DEFAULT_SERVICE_COMPANY_LOGO;
+}
+
 const pickAccountField = (accountInfo, keys) => {
   for (const key of keys) {
     const value = accountInfo?.[key];
@@ -65,7 +77,7 @@ export function getDefaultCompanyProfile() {
     name: DEFAULT_COMPANY_NAME,
     abbreviation: DEFAULT_ABBREVIATION,
     tagline: import.meta.env.VITE_COMPANY_TAGLINE || 'Professional Cleaning Services',
-    logoUrl: import.meta.env.VITE_COMPANY_LOGO_URL || DEFAULT_LOGO,
+    logoUrl: resolveCompanyLogoUrl(import.meta.env.VITE_COMPANY_LOGO_URL || DEFAULT_LOGO),
     website: import.meta.env.VITE_COMPANY_WEBSITE || 'www.trushinewindowcleaning.com',
     address: import.meta.env.VITE_COMPANY_ADDRESS || '3525 Murdock St, Houston, TX 77047',
     phone: import.meta.env.VITE_COMPANY_PHONE || '832-713-3545',
@@ -87,7 +99,8 @@ export function mapAccountInfoToCompanyProfile(accountInfo) {
 
   const locationName = pickAccountField(accountInfo, ['location_name']) || null;
   const tagline =
-    locationName && locationName !== name ? locationName : defaults.tagline || '';
+    pickAccountField(accountInfo, ['tagline']) ||
+    (locationName && locationName !== name ? locationName : '');
 
   const website = formatWebsite(
     pickAccountField(accountInfo, ['website', 'company_website']) ||
@@ -127,7 +140,7 @@ export function mapAccountInfoToCompanyProfile(accountInfo) {
     name,
     abbreviation,
     tagline,
-    logoUrl: pickAccountField(accountInfo, ['logo_url', 'logo']) || defaults.logoUrl,
+    logoUrl: resolveCompanyLogoUrl(pickAccountField(accountInfo, ['logo_url', 'logo'])),
     website,
     address,
     phone,

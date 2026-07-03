@@ -1,24 +1,26 @@
 import { Skeleton } from '@mui/material';
 import { useAccountBranding } from '../hooks/useAccountBranding';
+import { resolveCompanyLogoUrl } from '../utils/companyProfile';
 import CompanyLogoPlaceholder from './CompanyLogoPlaceholder';
 
 const TermsBrandingHeader = ({ profile: profileProp, locationId, isLoading: isLoadingProp }) => {
   const { profile: fetchedProfile, isLoading, isReady } = useAccountBranding({ locationId });
   const profile = profileProp || fetchedProfile;
   const showLoading = isLoadingProp ?? isLoading ?? !isReady;
+  const logoSrc = resolveCompanyLogoUrl(profile?.logoUrl);
 
   return (
     <nav className="bg-white border-b py-2 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-24">
         <div className="flex items-center justify-between h-16">
           <div className="flex items-center space-x-3">
-            {showLoading || !profile.logoUrl ? (
+            {showLoading ? (
               <CompanyLogoPlaceholder maxHeight="56px" maxWidth="56px" rounded />
             ) : (
               <img
-                src={profile.logoUrl}
+                src={logoSrc}
                 alt={`${profile.name} Logo`}
-                className="h-14 w-14 rounded-lg object-cover"
+                className="h-14 w-14 rounded-lg object-contain"
               />
             )}
             <div className="h-12 w-px bg-gray-300" />

@@ -1,13 +1,13 @@
 import React from 'react';
 import { alpha, useTheme } from '@mui/material/styles';
 import { Box, Card, CardContent, Link as MuiLink, Skeleton, Stack, Typography } from '@mui/material';
-import Business from '@mui/icons-material/Business';
 import EmailOutlined from '@mui/icons-material/EmailOutlined';
 import PhoneOutlined from '@mui/icons-material/PhoneOutlined';
 import PlaceOutlined from '@mui/icons-material/PlaceOutlined';
 import LanguageOutlined from '@mui/icons-material/LanguageOutlined';
 import { useAccountBranding } from '../../hooks/useAccountBranding';
 import CompanyLogoPlaceholder from '../CompanyLogoPlaceholder';
+import { resolveCompanyLogoUrl } from '../../utils/companyProfile';
 
 function formatAddress(addr) {
   if (!addr) return '';
@@ -86,7 +86,8 @@ function BusinessContactCard({ business, invitePortal, isLoading }) {
     ? /^https?:\/\//i.test(business.website)
       ? business.website
       : `https://${business.website}`
-  : null;
+    : null;
+  const logoSrc = resolveCompanyLogoUrl(business.logoUrl);
 
   return (
     <Card elevation={0} sx={businessCardSx}>
@@ -97,11 +98,11 @@ function BusinessContactCard({ business, invitePortal, isLoading }) {
         <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} alignItems={{ sm: 'flex-start' }}>
           {isLoading ? (
             <CompanyLogoPlaceholder maxHeight="56px" maxWidth="56px" rounded />
-          ) : business.logoUrl ? (
+          ) : (
             <Box
               component="img"
-              src={business.logoUrl}
-              alt={business.name ? `${business.name} logo` : ''}
+              src={logoSrc}
+              alt={business.name ? `${business.name} logo` : 'Company logo'}
               sx={{
                 width: 56,
                 height: 56,
@@ -115,25 +116,6 @@ function BusinessContactCard({ business, invitePortal, isLoading }) {
                   : {}),
               }}
             />
-          ) : (
-            <Box
-              sx={{
-                width: 56,
-                height: 56,
-                borderRadius: 2,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                ...(invitePortal
-                  ? {
-                      background: 'linear-gradient(135deg, #6366f1 0%, #3b82f6 100%)',
-                    }
-                  : { bgcolor: 'grey.100' }),
-              }}
-            >
-              <Business sx={{ color: invitePortal ? '#fff' : 'grey.600' }} />
-            </Box>
           )}
           <Box sx={{ minWidth: 0, flex: 1 }}>
             {isLoading ? (
