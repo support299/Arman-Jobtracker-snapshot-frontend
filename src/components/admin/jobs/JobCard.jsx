@@ -301,16 +301,21 @@ export function JobCard({
 
   const assignedUserNames = job.assignments
     ?.map((assignment) => {
-        if (assignment.user) {
-          if (assignment.first_name || assignment.last_name) {
-            const fullName = `${assignment.first_name || ""} ${assignment.last_name || ""}`.trim()
-            return toTitleCase(fullName)
-          } else if (assignment.email) {
-            return assignment.email
-          }
-        }
-      const email = assignment.user_email || assignment.user || ""
-      return email.includes("@") ? email : toTitleCase(email)
+      const nestedUser = assignment.user && typeof assignment.user === "object" ? assignment.user : null
+      const firstName = assignment.first_name ?? nestedUser?.first_name
+      const lastName = assignment.last_name ?? nestedUser?.last_name
+      if (firstName || lastName) {
+        const fullName = `${firstName || ""} ${lastName || ""}`.trim()
+        return toTitleCase(fullName)
+      }
+      const email =
+        assignment.user_email
+        ?? assignment.email
+        ?? nestedUser?.email
+        ?? (typeof assignment.user === "string" ? assignment.user : "")
+      const emailStr = String(email || "").trim()
+      if (!emailStr) return null
+      return emailStr.includes("@") ? emailStr : toTitleCase(emailStr)
     })
     .filter((name) => name)
     .join(", ") || "Unassigned"
