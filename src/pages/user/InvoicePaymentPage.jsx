@@ -1,6 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
-import SignatureCanvas from "react-signature-canvas"
 import { CheckCircle2, CreditCard, FileText, Loader2, Printer } from "lucide-react"
 import { toast } from "sonner"
 import { axiosInstance } from "../../store/axios/axios"
@@ -33,9 +32,164 @@ function formatDate(value) {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" })
 }
 
+/**
+ * Plain HTML canvas pad — avoids react-signature-canvas (ref often null on Save).
+ * onChange(base64WithoutPrefix | null) fires when ink changes.
+ */
+const SimpleSignaturePad = forwardRef(function SimpleSignaturePad({ onChange, initialSignature = null }, ref) {
+  const canvasRef = useRef(null)
+  const drawingRef = useRef(false)
+  const hasInkRef = useRef(false)
+  const lastPosRef = useRef(null)
+  // Captured once at mount; redraws of the parent must not repaint the pad.
+  const initialSignatureRef = useRef(initialSignature)
+
+  const setupCanvas = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas) return
+    const parent = canvas.parentElement
+    const cssW = Math.max(parent?.clientWidth || 600, 280)
+    const cssH = 160
+    const ratio = Math.max(window.devicePixelRatio || 1, 1)
+    canvas.width = Math.floor(cssW * ratio)
+    canvas.height = Math.floor(cssH * ratio)
+    canvas.style.width = `${cssW}px`
+    canvas.style.height = `${cssH}px`
+    const ctx = canvas.getContext("2d")
+    if (!ctx) return
+    ctx.setTransform(1, 0, 0, 1, 0, 0)
+    ctx.scale(ratio, ratio)
+    ctx.fillStyle = "#ffffff"
+    ctx.fillRect(0, 0, cssW, cssH)
+    ctx.lineCap = "round"
+    ctx.lineJoin = "round"
+    ctx.strokeStyle = "#0f172a"
+    ctx.lineWidth = 2.5
+    hasInkRef.current = false
+  }, [])
+
+  const exportBase64 = useCallback(() => {
+    const canvas = canvasRef.current
+    if (!canvas || !hasInkRef.current) return null
+    try {
+      const dataUrl = canvas.toDataURL("image/png")
+      // NOTE: split(",")[1], NOT split(",", 1)[1] — in JS the limit truncates the array.
+      return (dataUrl.includes(",") ? dataUrl.split(",")[1] : dataUrl) || null
+    } catch {
+      return null
+    }
+  }, [])
+
+  const clear = useCallback(() => {
+    setupCanvas()
+    onChange(null)
+  }, [setupCanvas, onChange])
+
+  const emit = useCallback(() => {
+    onChange(exportBase64())
+  }, [exportBase64, onChange])
+
+  const drawSavedSignature = useCallback((b64) => {
+    if (!b64) return
+    const img = new Image()
+    img.onload = () => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      const ctx = canvas.getContext("2d")
+      if (!ctx) return
+      const cssW = parseFloat(canvas.style.width) || 600
+      const cssH = parseFloat(canvas.style.height) || 160
+      const scale = Math.min(cssW / img.width, cssH / img.height, 1)
+      const w = img.width * scale
+      const h = img.height * scale
+      ctx.drawImage(img, (cssW - w) / 2, (cssH - h) / 2, w, h)
+      hasInkRef.current = true
+    }
+    img.src = b64.startsWith("data:") ? b64 : `data:image/png;base64,${b64}`
+  }, [])
+
+  useEffect(() => {
+    setupCanvas()
+    drawSavedSignature(initialSignatureRef.current)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: show saved signature once
+  }, [setupCanvas, drawSavedSignature])
+
+  useImperativeHandle(ref, () => ({
+    clear,
+    exportBase64,
+    hasInk: () => hasInkRef.current,
+    loadSignature: drawSavedSignature,
+  }), [clear, exportBase64, drawSavedSignature])
+
+  const getPos = (event) => {
+    const canvas = canvasRef.current
+    if (!canvas) return null
+    const rect = canvas.getBoundingClientRect()
+    const src = event.touches?.[0] || event.changedTouches?.[0] || event
+    if (src?.clientX == null) return null
+    return { x: src.clientX - rect.left, y: src.clientY - rect.top }
+  }
+
+  const startDraw = (event) => {
+    event.preventDefault()
+    const pos = getPos(event)
+    if (!pos) return
+    drawingRef.current = true
+    lastPosRef.current = pos
+    const ctx = canvasRef.current?.getContext("2d")
+    if (!ctx) return
+    ctx.beginPath()
+    ctx.moveTo(pos.x, pos.y)
+    ctx.lineTo(pos.x + 0.01, pos.y + 0.01)
+    ctx.stroke()
+    hasInkRef.current = true
+  }
+
+  const moveDraw = (event) => {
+    if (!drawingRef.current) return
+    event.preventDefault()
+    const pos = getPos(event)
+    const last = lastPosRef.current
+    if (!pos || !last) return
+    const ctx = canvasRef.current?.getContext("2d")
+    if (!ctx) return
+    ctx.beginPath()
+    ctx.moveTo(last.x, last.y)
+    ctx.lineTo(pos.x, pos.y)
+    ctx.stroke()
+    lastPosRef.current = pos
+    hasInkRef.current = true
+  }
+
+  const endDraw = (event) => {
+    if (!drawingRef.current) return
+    event.preventDefault()
+    drawingRef.current = false
+    lastPosRef.current = null
+    emit()
+  }
+
+  return (
+    <canvas
+      ref={canvasRef}
+      className="touch-none bg-white"
+      style={{ display: "block", width: "100%", height: "160px", cursor: "crosshair" }}
+      onMouseDown={startDraw}
+      onMouseMove={moveDraw}
+      onMouseUp={endDraw}
+      onMouseLeave={endDraw}
+      onTouchStart={startDraw}
+      onTouchMove={moveDraw}
+      onTouchEnd={endDraw}
+      onTouchCancel={endDraw}
+    />
+  )
+})
+
 export default function InvoicePaymentPage() {
   const { jobId } = useParams()
-  const sigRef = useRef(null)
+  const sigCanvasRef = useRef(null)
+  const signatureDataRef = useRef(null) // always-current base64; avoids stale state on Save
   const [invoice, setInvoice] = useState(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(null)
@@ -45,6 +199,7 @@ export default function InvoicePaymentPage() {
   const [signatureData, setSignatureData] = useState(null) // base64 PNG, no data: prefix
   const [submitting, setSubmitting] = useState(false)
   const [savingTip, setSavingTip] = useState(false)
+  const [savingSignature, setSavingSignature] = useState(false)
   const awaitingPaymentReturnRef = useRef(false)
 
   const applyInvoiceData = useCallback((data, { preserveLocalSignature = false } = {}) => {
@@ -55,9 +210,12 @@ export default function InvoicePaymentPage() {
     if (preserveLocalSignature) return
     if (data.has_signature && data.signature) {
       const raw = String(data.signature)
-      setSignatureData(raw.includes(",") ? raw.split(",", 1)[1] : raw)
+      const b64 = raw.includes(",") ? raw.split(",")[1] : raw
+      signatureDataRef.current = b64
+      setSignatureData(b64)
       setHasDrawnSignature(true)
     } else {
+      signatureDataRef.current = null
       setSignatureData(null)
       setHasDrawnSignature(false)
     }
@@ -121,37 +279,32 @@ export default function InvoicePaymentPage() {
     if (!Number.isNaN(n) && n >= 0) setTipAmount(n)
   }
 
+  const onSignatureChange = useCallback((b64) => {
+    signatureDataRef.current = b64 || null
+    setSignatureData(b64 || null)
+    setHasDrawnSignature(Boolean(b64))
+  }, [])
+
   const clearSignature = () => {
-    sigRef.current?.clear()
+    sigCanvasRef.current?.clear?.()
+    signatureDataRef.current = null
     setSignatureData(null)
     setHasDrawnSignature(false)
   }
 
-  const persistSignatureFromCanvas = () => {
-    try {
-      const pad = sigRef.current
-      if (!pad) return null
-      const canvas = typeof pad.getCanvas === "function" ? pad.getCanvas() : null
-      if (!canvas || !canvas.width || !canvas.height) return null
-      const dataUrl = canvas.toDataURL("image/png")
-      const b64 = dataUrl.includes(",") ? dataUrl.split(",", 1)[1] : dataUrl
-      // Tiny / blank data URLs are useless
-      if (!b64 || b64.length < 100) return null
-      setSignatureData(b64)
-      setHasDrawnSignature(true)
-      return b64
-    } catch {
-      return null
-    }
-  }
-
   const captureSignature = () => {
+    const live = sigCanvasRef.current?.exportBase64?.()
+    if (live) {
+      signatureDataRef.current = live
+      setSignatureData(live)
+      setHasDrawnSignature(true)
+      return live
+    }
+    if (signatureDataRef.current) return signatureDataRef.current
     if (signatureData) return signatureData
-    const fromCanvas = persistSignatureFromCanvas()
-    if (fromCanvas) return fromCanvas
     if (invoice?.signature) {
       const raw = String(invoice.signature)
-      return raw.includes(",") ? raw.split(",", 1)[1] : raw
+      return raw.includes(",") ? raw.split(",")[1] : raw
     }
     return null
   }
@@ -180,6 +333,32 @@ export default function InvoicePaymentPage() {
       toast.error(err?.response?.data?.detail || "Failed to save tip")
     } finally {
       setSavingTip(false)
+    }
+  }
+
+  const handleSaveSignature = async () => {
+    // Prefer ref written on every stroke end; then live canvas export.
+    let signature = signatureDataRef.current || captureSignature()
+    if (!signature) {
+      toast.error("Please sign before saving")
+      return
+    }
+    setSavingSignature(true)
+    try {
+      // Keep current tip amount so we don't wipe a saved tip; tip only syncs if it changed.
+      const { data } = await axiosInstance.post(`/job/public/invoice/${jobId}/prepare-payment/`, {
+        tip_amount: tipAmount || 0,
+        signature,
+        save_tip_only: true,
+      })
+      const next = data?.invoice || data
+      applyInvoiceData(next)
+      toast.success("Signature saved")
+      await loadInvoice({ silent: true })
+    } catch (err) {
+      toast.error(err?.response?.data?.detail || "Failed to save signature")
+    } finally {
+      setSavingSignature(false)
     }
   }
 
@@ -429,35 +608,39 @@ export default function InvoicePaymentPage() {
                     Optional — you can pay through GHL without signing.
                   </p>
                 </div>
-                {invoice.signature && !hasDrawnSignature ? (
-                  <img
-                    src={
-                      invoice.signature.startsWith("data:")
-                        ? invoice.signature
-                        : `data:image/png;base64,${invoice.signature}`
-                    }
-                    alt="Saved signature"
-                    className="h-40 w-full rounded-lg border bg-white object-contain"
-                  />
-                ) : null}
                 <div className="overflow-hidden rounded-lg border bg-white">
-                  <SignatureCanvas
-                    ref={sigRef}
-                    penColor="#0f172a"
-                    canvasProps={{
-                      className: "sig-canvas h-40 w-full touch-none",
-                      width: 700,
-                      height: 160,
-                      style: { width: "100%", height: "160px" },
-                    }}
-                    onEnd={persistSignatureFromCanvas}
+                  <SimpleSignaturePad
+                    ref={sigCanvasRef}
+                    onChange={onSignatureChange}
+                    initialSignature={invoice.signature || null}
                   />
                 </div>
-                <div className="flex gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button type="button" variant="outline" onClick={clearSignature}>
                     Clear
                   </Button>
+                  <Button
+                    type="button"
+                    onClick={handleSaveSignature}
+                    disabled={savingSignature || submitting}
+                  >
+                    {savingSignature ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Saving…
+                      </>
+                    ) : (
+                      "Save signature"
+                    )}
+                  </Button>
                 </div>
+                {invoice.has_signature ? (
+                  <p className="text-xs text-slate-500">Signature saved on this invoice.</p>
+                ) : hasDrawnSignature ? (
+                  <p className="text-xs text-amber-700">
+                    Signature not saved yet — click Save signature to store it.
+                  </p>
+                ) : null}
               </div>
 
               <div className="rounded-xl bg-sky-50 p-4">
@@ -468,7 +651,7 @@ export default function InvoicePaymentPage() {
                   type="button"
                   size="lg"
                   className="w-full"
-                  disabled={submitting || savingTip}
+                  disabled={submitting || savingTip || savingSignature}
                   onClick={handlePay}
                 >
                   {submitting ? (
