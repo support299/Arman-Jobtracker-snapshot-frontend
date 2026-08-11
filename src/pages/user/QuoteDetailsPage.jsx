@@ -141,9 +141,18 @@ const QuoteDetailsPage = () => {
     setIsScheduling(true)
     try {
       await createSchedule(payload).unwrap()
-      window.location.assign(
-        buildBookingRedirectUrl(quote.contact, locationId, accountInfo?.booking_redirect_url),
+      const redirectUrl = buildBookingRedirectUrl(
+        quote.contact,
+        locationId,
+        accountInfo?.booking_redirect_url,
       )
+      if (redirectUrl) {
+        window.location.assign(redirectUrl)
+        return
+      }
+      // No redirect configured — show in-page success (Scheduled card) after refetch.
+      await refetch()
+      window.scrollTo({ top: 0, behavior: "smooth" })
     } catch (err) {
       // Error handled by toast notification
     } finally {

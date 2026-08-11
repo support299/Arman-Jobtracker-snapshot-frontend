@@ -23,6 +23,7 @@ import UserLogin from './pages/admin/userLogin.jsx';
 import AdminProtectedRoute from './pages/AdminProtectedRoute.jsx';
 import QuoteDetailsPage from './pages/user/QuoteDetailsPage.jsx';
 import OriginalProposalPage from './pages/user/OriginalProposalPage.jsx';
+import InvoicePaymentPage from './pages/user/InvoicePaymentPage.jsx';
 import HouseSizeInfo from './components/admin/HouseSizeInfo.jsx';
 import PlatformProtectedRoute from './platform/PlatformProtectedRoute.jsx';
 import PlatformLayout from './platform/PlatformLayout.jsx';
@@ -126,6 +127,7 @@ function App() {
                   <Route path="/booking" element={<BookingWizard />} />
                   <Route path="/quote/details/:id" element={<QuoteDetailsPage />} />
                   <Route path="/quote/original/:id" element={<OriginalProposalPage />} />
+                  <Route path="/invoice/:jobId" element={<InvoicePaymentPage />} />
                   <Route path="/portal/contacts/:id" element={<ContactDetail />} />
                   <Route path="/contact/jobs/:ghl_contact_id" element={<ContactProfilePage />} />
                   <Route path="/contact/profile/:ghl_contact_id" element={<ContactProfilePage />} />

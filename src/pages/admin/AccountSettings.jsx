@@ -29,7 +29,6 @@ import {
   useRefreshAccountCalendarsMutation,
 } from "../../store/api/accountSettingsApi"
 import { syncAccountBrandingAfterSettings } from "../../utils/syncAccountBranding"
-import { DEFAULT_BOOKING_REDIRECT_URL } from "../../utils/bookingRedirect"
 import { DEFAULT_INVOICE_LINK_BASE_URL } from "../../utils/invoiceLink"
 import { useDispatch } from "react-redux"
 
@@ -183,7 +182,7 @@ const AccountSettings = () => {
       setStatusMessage(
         trimmed
           ? "Booking redirect URL updated."
-          : "Booking redirect URL cleared. The default will be used after scheduling.",
+          : "Booking redirect URL cleared. Customers will stay on this page after scheduling.",
       )
       setStatusSeverity("success")
     } catch (err) {
@@ -518,7 +517,7 @@ const AccountSettings = () => {
             After a customer picks a time on an accepted quote, they are sent to this page (for
             example, a credit card authorization form). Contact details are appended as query
             parameters: <code>full_name</code>, <code>email</code>, and <code>phone</code>.
-            Leave blank to use the default: {DEFAULT_BOOKING_REDIRECT_URL}
+            Leave blank for no redirect after scheduling.
           </Typography>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }}>
             <TextField
@@ -551,9 +550,10 @@ const AccountSettings = () => {
             Invoice link base URL
           </Typography>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Used for the View Invoice button on completed jobs. The GHL invoice id is appended to
-            this URL (for example,{" "}
+            Fallback host for GoHighLevel payment links (for example,{" "}
             <code>https://links.theservicepilot.com/invoice/6a440961f1f144dd9a5a8f75</code>).
+            The job &quot;View Invoice&quot; button opens this app&apos;s customer invoice page
+            (<code>/invoice/&lt;job-id&gt;</code>) for tip, signature, and pay via GHL.
             Leave blank to use the default base: {DEFAULT_INVOICE_LINK_BASE_URL}
           </Typography>
           <Stack direction={{ xs: "column", sm: "row" }} spacing={2} alignItems={{ sm: "flex-start" }}>

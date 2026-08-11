@@ -1,42 +1,68 @@
 /**
- * GoHighLevel custom JS — contact profile button (multi-subaccount).
+ * GoHighLevel custom JS — contact profile button (multi-app routing).
  *
  * Paste into GHL: Settings → Company → Custom JS/CSS (or subaccount custom code).
- * Works for every onboarded location — location_id is read from the GHL URL.
- * The button is shown only when /api/quote/account-info/ confirms the location is onboarded.
+ * Works across deployments:
+ *   - Dedicated single-account apps (e.g. TruShine → services.theservicepilot.com)
+ *   - Snapshot multi-subaccount app (snapshot.theservicepilot.com)
  *
- * Configure APP_BASE_URL to your deployed frontend origin (no trailing slash).
+ * location_id is read from the GHL URL. The button is shown only when the
+ * matching deployment's /api/quote/account-info/ confirms the location is onboarded.
  */
 (function () {
   'use strict';
 
-  var APP_BASE_URL = 'https://snapshot.theservicepilot.com';
-  var API_BASE_URL = APP_BASE_URL + '/api';
+  /** location_id → frontend origin (no trailing slash) */
+  var LOCATION_APP_ROUTES = {
+    b8qvo7VooP3JD3dIZU42: 'https://services.theservicepilot.com',
+  };
+
+  /** Default app for all other onboarded subaccounts */
+  var SNAPSHOT_APP_BASE_URL = 'https://snapshot.theservicepilot.com';
+
   var ONBOARD_CACHE_PREFIX = 'sp_location_onboarded_';
   var ONBOARD_CACHE_TTL_MS = 5 * 60 * 1000;
-  var TARGET_SELECTOR =
-    '#record-details-new-ui > div > div > div > div.h-full.transition-all.duration-300.shrink-0.right-sidebar-container > div > nav > div.flex.flex-col.items-center.gap-2.rounded-lg';
   var BUTTON_ID = 'sp-contact-profile-button';
   var POPUP_ID = 'sp-contact-profile-popup';
   var onboardCheckToken = 0;
 
-  function readOnboardCache(locationId) {
+  function getAppBaseUrlForLocation(locationId) {
+    return LOCATION_APP_ROUTES[locationId] || SNAPSHOT_APP_BASE_URL;
+  }
+
+  function findTargetContainer() {
+    var rightSidebar = document.querySelector('[class*="right-sidebar-container"]');
+    if (!rightSidebar) return null;
+
+    var nav = rightSidebar.querySelector('nav');
+    if (!nav) return null;
+
+    var group = nav.querySelector('div[class*="flex-col"][class*="items-center"]');
+    return group || nav;
+  }
+
+  function readOnboardCache(locationId, appBaseUrl) {
     try {
       var raw = sessionStorage.getItem(ONBOARD_CACHE_PREFIX + locationId);
       if (!raw) return null;
       var parsed = JSON.parse(raw);
       if (!parsed || Date.now() - parsed.at > ONBOARD_CACHE_TTL_MS) return null;
+      if (parsed.appBaseUrl && parsed.appBaseUrl !== appBaseUrl) return null;
       return !!parsed.onboarded;
     } catch (error) {
       return null;
     }
   }
 
-  function writeOnboardCache(locationId, onboarded) {
+  function writeOnboardCache(locationId, appBaseUrl, onboarded) {
     try {
       sessionStorage.setItem(
         ONBOARD_CACHE_PREFIX + locationId,
-        JSON.stringify({ onboarded: !!onboarded, at: Date.now() })
+        JSON.stringify({
+          onboarded: !!onboarded,
+          appBaseUrl: appBaseUrl,
+          at: Date.now(),
+        })
       );
     } catch (error) {
       // ignore storage errors
@@ -45,30 +71,31 @@
 
   function isLocationOnboarded(locationId, callback) {
     if (!locationId) {
-      callback(false);
+      callback(false, null);
       return;
     }
 
-    var cached = readOnboardCache(locationId);
+    var appBaseUrl = getAppBaseUrlForLocation(locationId);
+    var cached = readOnboardCache(locationId, appBaseUrl);
     if (cached !== null) {
-      callback(cached);
+      callback(cached, appBaseUrl);
       return;
     }
 
     var url =
-      API_BASE_URL +
-      '/quote/account-info/?location_id=' +
+      appBaseUrl +
+      '/api/quote/account-info/?location_id=' +
       encodeURIComponent(locationId);
 
     fetch(url, { method: 'GET', credentials: 'omit' })
       .then(function (response) {
         var onboarded = response.ok;
-        writeOnboardCache(locationId, onboarded);
-        callback(onboarded);
+        writeOnboardCache(locationId, appBaseUrl, onboarded);
+        callback(onboarded, appBaseUrl);
       })
       .catch(function () {
-        writeOnboardCache(locationId, false);
-        callback(false);
+        writeOnboardCache(locationId, appBaseUrl, false);
+        callback(false, appBaseUrl);
       });
   }
 
@@ -92,7 +119,7 @@
   }
 
   function isTargetElementVisible() {
-    var element = document.querySelector(TARGET_SELECTOR);
+    var element = findTargetContainer();
     if (!element) return false;
     var style = window.getComputedStyle(element);
     return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
@@ -103,9 +130,9 @@
     if (popup) popup.remove();
   }
 
-  function buildProfileUrl(contactId, locationId) {
+  function buildProfileUrl(appBaseUrl, contactId, locationId) {
     return (
-      APP_BASE_URL +
+      appBaseUrl +
       '/contact/jobs/' +
       encodeURIComponent(contactId) +
       '?location_id=' +
@@ -113,7 +140,7 @@
     );
   }
 
-  function showPopup() {
+  function showPopup(appBaseUrl) {
     var contactId = extractContactId();
     var locationId = extractLocationId();
 
@@ -122,7 +149,8 @@
       return;
     }
 
-    var popupUrl = buildProfileUrl(contactId, locationId);
+    var resolvedAppBaseUrl = appBaseUrl || getAppBaseUrlForLocation(locationId);
+    var popupUrl = buildProfileUrl(resolvedAppBaseUrl, contactId, locationId);
     closePopup();
 
     var overlay = document.createElement('div');
@@ -179,14 +207,15 @@
     });
   }
 
-  function addCustomButton() {
+  function addCustomButton(appBaseUrl) {
     if (document.getElementById(BUTTON_ID)) return;
-    var targetElement = document.querySelector(TARGET_SELECTOR);
+    var targetElement = findTargetContainer();
     if (!targetElement) return;
 
     var button = document.createElement('button');
     button.id = BUTTON_ID;
     button.setAttribute('title', 'Open client profile');
+    button.dataset.appBaseUrl = appBaseUrl;
     button.innerHTML =
       '<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>';
     button.style.cssText =
@@ -201,7 +230,9 @@
       button.style.color = '#374151';
       button.style.backgroundColor = 'transparent';
     };
-    button.addEventListener('click', showPopup);
+    button.addEventListener('click', function () {
+      showPopup(button.dataset.appBaseUrl || appBaseUrl);
+    });
     targetElement.appendChild(button);
   }
 
@@ -218,7 +249,7 @@
     }
 
     var checkId = ++onboardCheckToken;
-    isLocationOnboarded(locationId, function (onboarded) {
+    isLocationOnboarded(locationId, function (onboarded, appBaseUrl) {
       if (checkId !== onboardCheckToken) return;
 
       if (!onboarded) {
@@ -226,7 +257,7 @@
         return;
       }
 
-      if (isTargetElementVisible()) addCustomButton();
+      if (isTargetElementVisible()) addCustomButton(appBaseUrl);
     });
   }
 
@@ -242,7 +273,7 @@
       attributes: true,
       attributeFilter: ['style', 'class'],
     });
-    console.log('[ServicePilot] Contact profile button loaded (onboarded locations only)');
+    console.log('[ServicePilot] Contact profile button loaded (multi-app routing)');
   }
 
   document.addEventListener('click', function (event) {

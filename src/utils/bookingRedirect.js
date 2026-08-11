@@ -1,31 +1,30 @@
-/** Location that uses All Day Projects booking portal after calendar scheduling. */
+/** Location that uses All Day Projects branding / portal elsewhere in the app. */
 export const ALL_DAY_PROJECTS_LOCATION_ID = 'Q6mmZyHzEztauzOHEBrk';
-
-const LOCATION_BOOKING_REDIRECT_URLS = {
-  [ALL_DAY_PROJECTS_LOCATION_ID]: 'https://alldayprojects.theservicepilot.com',
-};
-
-const DEFAULT_BOOKING_REDIRECT_URL =
-  import.meta.env.VITE_BOOKING_REDIRECT_URL ||
-  'https://trushinewindowcleaning.theservicepilot.com';
 
 /**
  * Base URL for post-scheduling redirect (credit card form, etc.).
- * @param {string|null|undefined} locationId
+ * Only uses the account setting — blank means no redirect.
+ * @param {string|null|undefined} _locationId Unused (kept for call-site compatibility).
  * @param {string|null|undefined} accountBookingRedirectUrl From account-info / settings API.
+ * @returns {string|null}
  */
-export function getBookingRedirectBaseUrl(locationId, accountBookingRedirectUrl) {
+export function getBookingRedirectBaseUrl(_locationId, accountBookingRedirectUrl) {
   const fromAccount = (accountBookingRedirectUrl || '').trim();
-  if (fromAccount) {
-    return fromAccount.replace(/\/$/, '');
+  if (!fromAccount) {
+    return null;
   }
-  if (locationId && LOCATION_BOOKING_REDIRECT_URLS[locationId]) {
-    return LOCATION_BOOKING_REDIRECT_URLS[locationId];
-  }
-  return DEFAULT_BOOKING_REDIRECT_URL;
+  return fromAccount.replace(/\/$/, '');
 }
 
+/**
+ * Full redirect URL with contact query params, or null when no redirect is configured.
+ */
 export function buildBookingRedirectUrl(contact, locationId, accountBookingRedirectUrl) {
+  const base = getBookingRedirectBaseUrl(locationId, accountBookingRedirectUrl);
+  if (!base) {
+    return null;
+  }
+
   const fullName =
     contact?.full_name ||
     [contact?.first_name, contact?.last_name].filter(Boolean).join(' ');
@@ -36,9 +35,9 @@ export function buildBookingRedirectUrl(contact, locationId, accountBookingRedir
     phone: contact?.phone || '',
   });
 
-  const base = getBookingRedirectBaseUrl(locationId, accountBookingRedirectUrl);
   const separator = base.includes('?') ? '&' : '?';
   return `${base}${separator}${params.toString()}`;
 }
 
-export { DEFAULT_BOOKING_REDIRECT_URL };
+/** @deprecated Blank booking redirect means no redirect; kept for UI import compatibility. */
+export const DEFAULT_BOOKING_REDIRECT_URL = '';

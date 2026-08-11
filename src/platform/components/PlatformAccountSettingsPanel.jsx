@@ -19,7 +19,6 @@ import StatusBadge from "./StatusBadge"
 import InfoRow from "./InfoRow"
 import TimezoneSelect from "./TimezoneSelect"
 import { formatDateTime } from "../utils/formatters"
-import { DEFAULT_BOOKING_REDIRECT_URL } from "../../utils/bookingRedirect"
 import { DEFAULT_INVOICE_LINK_BASE_URL } from "../../utils/invoiceLink"
 
 export default function PlatformAccountSettingsPanel({ accountId }) {
@@ -310,7 +309,7 @@ export default function PlatformAccountSettingsPanel({ accountId }) {
           <div className="space-y-2">
             <Label>Booking redirect URL</Label>
             <p className="text-xs text-muted-foreground">
-              Leave blank for default: {DEFAULT_BOOKING_REDIRECT_URL}
+              Leave blank for no redirect after scheduling.
             </p>
             <Input
               value={bookingRedirectUrl}
@@ -321,7 +320,8 @@ export default function PlatformAccountSettingsPanel({ accountId }) {
           <div className="space-y-2">
             <Label>Invoice link base URL</Label>
             <p className="text-xs text-muted-foreground">
-              Leave blank for default: {DEFAULT_INVOICE_LINK_BASE_URL}
+              Fallback for GHL pay links. View Invoice opens /invoice/&lt;job-id&gt;. Default:{" "}
+              {DEFAULT_INVOICE_LINK_BASE_URL}
             </p>
             <Input
               value={invoiceLinkBaseUrl}

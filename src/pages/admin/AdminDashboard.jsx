@@ -5,9 +5,7 @@ import {
   Card,
   CardContent,
   Typography,
-  Grid,
   Button,
-  TextField,
   MenuItem,
   FormControl,
   InputLabel,
@@ -57,8 +55,11 @@ import {
   Line,
   ReferenceArea,
 } from 'recharts';
-import { format } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, startOfYear, endOfYear, addDays, min as minDate, max as maxDate } from 'date-fns';
 import { useGetAnalyticsQuery, useGetHeatMapQuery, useGetLeadFunnelReportQuery, useGetSalesForecastingQuery } from '../../store/api/dashboardApi';
+import { useGetEmployeesQuery } from '../../store/api/payrollApi';
+import { useMoneyFormatter } from '../../hooks/useMoneyFormatter';
+import { AlertCircle, AlertTriangle, Ban, CalendarDays, CheckCircle, Clock, File, FileText, PersonStandingIcon } from 'lucide-react';
 
 // Parse date-only string (yyyy-MM-dd) as local date so CDT/other timezones don't show previous day
 const parseLocalDate = (dateStr) => {
@@ -70,9 +71,14 @@ const parseLocalDate = (dateStr) => {
   }
   return new Date(s);
 };
-import { useGetEmployeesQuery } from '../../store/api/payrollApi';
-import { useMoneyFormatter } from '../../hooks/useMoneyFormatter';
-import { AlertCircle, AlertTriangle, CheckCircle, Clock, File, FileText, PersonStandingIcon } from 'lucide-react';
+
+const currentMonthRange = () => {
+  const now = new Date();
+  return {
+    start_date: format(startOfMonth(now), 'yyyy-MM-dd'),
+    end_date: format(endOfMonth(now), 'yyyy-MM-dd'),
+  };
+};
 
 const STATUS_COLORS = {
   paid: '#22c55e',
@@ -81,6 +87,9 @@ const STATUS_COLORS = {
   overdue: '#ef4444',
   draft: '#64748b',
   sent: '#3b82f6',
+  void: '#6b7280',
+  partially_paid: '#a855f7',
+  partial: '#a855f7',
   payment_processing: '#8b5cf6',
 };
 
@@ -93,6 +102,132 @@ const ProgressBar = styled(LinearProgress)(({ trackcolor, barcolor, height }) =>
     borderRadius: 4,
   },
 }));
+
+const GRANULARITY_OPTIONS = [
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'yearly', label: 'Yearly' },
+];
+
+/** Format a from–to span for chart axis / tooltip */
+const formatDateSpan = (start, end, { short = false } = {}) => {
+  if (!start) return '';
+  if (!end || start.getTime() === end.getTime()) {
+    return format(start, short ? 'MMM d' : 'MMM d, yyyy');
+  }
+  const sameYear = start.getFullYear() === end.getFullYear();
+  const sameMonth = sameYear && start.getMonth() === end.getMonth();
+  if (short) {
+    if (sameMonth) return `${format(start, 'MMM d')}–${format(end, 'd')}`;
+    if (sameYear) return `${format(start, 'MMM d')}–${format(end, 'MMM d')}`;
+    return `${format(start, 'MMM d, yy')}–${format(end, 'MMM d, yy')}`;
+  }
+  if (sameMonth) return `${format(start, 'MMM d')} – ${format(end, 'd, yyyy')}`;
+  if (sameYear) return `${format(start, 'MMM d')} – ${format(end, 'MMM d, yyyy')}`;
+  return `${format(start, 'MMM d, yyyy')} – ${format(end, 'MMM d, yyyy')}`;
+};
+
+const resolveTrendPeriodBounds = (trend, granularity, rangeStart, rangeEnd) => {
+  const startRaw = trend.period_start || trend.period;
+  let start = parseLocalDate(startRaw);
+  if (!start) return { start: null, end: null };
+
+  let end = trend.period_end ? parseLocalDate(trend.period_end) : null;
+  if (!end) {
+    if (granularity === 'weekly') end = addDays(start, 6);
+    else if (granularity === 'monthly') end = endOfMonth(start);
+    else if (granularity === 'yearly') end = endOfYear(start);
+    else end = start;
+  }
+
+  if (rangeStart) start = maxDate([start, rangeStart]);
+  if (rangeEnd) end = minDate([end, rangeEnd]);
+  if (end < start) end = start;
+  return { start, end };
+};
+
+const formatTrendPeriodLabels = (trend, granularity, rangeStart, rangeEnd) => {
+  const { start, end } = resolveTrendPeriodBounds(trend, granularity, rangeStart, rangeEnd);
+  if (!start) {
+    return { axis: String(trend.period || ''), full: String(trend.period || ''), key: String(trend.period || '') };
+  }
+
+  const key = `${format(start, 'yyyy-MM-dd')}_${format(end, 'yyyy-MM-dd')}`;
+  const spansYears = rangeStart && rangeEnd && rangeStart.getFullYear() !== rangeEnd.getFullYear();
+
+  if (granularity === 'daily') {
+    return {
+      key,
+      axis: format(start, spansYears ? 'MMM d, yy' : 'MMM d'),
+      full: format(start, 'EEE, MMM d, yyyy'),
+    };
+  }
+  if (granularity === 'weekly') {
+    return {
+      key,
+      axis: formatDateSpan(start, end, { short: true }),
+      full: `Week · ${formatDateSpan(start, end)}`,
+    };
+  }
+  if (granularity === 'monthly') {
+    return {
+      key,
+      axis: format(start, 'MMM yyyy'),
+      full: format(start, 'MMMM yyyy'),
+    };
+  }
+  if (granularity === 'yearly') {
+    return {
+      key,
+      axis: format(start, 'yyyy'),
+      full: format(start, 'yyyy'),
+    };
+  }
+  return {
+    key,
+    axis: formatDateSpan(start, end, { short: true }),
+    full: formatDateSpan(start, end),
+  };
+};
+
+const RevenueTrendTooltip = ({ active, payload, formatCurrency }) => {
+  if (!active || !payload?.length) return null;
+  const row = payload[0]?.payload;
+  if (!row) return null;
+  return (
+    <Box
+      sx={{
+        bgcolor: 'rgba(255,255,255,0.98)',
+        border: '1px solid',
+        borderColor: 'rgba(15, 23, 42, 0.08)',
+        borderRadius: 2,
+        boxShadow: '0 8px 24px rgba(15, 23, 42, 0.12)',
+        px: 1.75,
+        py: 1.25,
+        minWidth: 168,
+      }}
+    >
+      <Typography sx={{ fontSize: '0.75rem', fontWeight: 700, color: '#0f172a', mb: 1 }}>
+        {row.periodFull}
+      </Typography>
+      {payload.map((item) => (
+        <Box
+          key={item.dataKey}
+          sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, py: 0.25 }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+            <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
+            <Typography sx={{ fontSize: '0.75rem', color: 'text.secondary' }}>{item.name}</Typography>
+          </Box>
+          <Typography sx={{ fontSize: '0.75rem', fontWeight: 600, color: '#0f172a' }}>
+            {formatCurrency(Number(item.value) || 0)}
+          </Typography>
+        </Box>
+      ))}
+    </Box>
+  );
+};
 
 export const AdminDashboard = () => {
   const theme = useTheme();
@@ -117,17 +252,13 @@ export const AdminDashboard = () => {
     return ids.join(',');
   }, [assigneesData?.results]);
 
-  // Top filter: 2 years — previous year Jan 1 to current year Dec 31
-  const [filters, setFilters] = useState(() => {
-    const now = new Date();
-    const prevYearFirst = new Date(now.getFullYear() - 1, 0, 1);
-    const currentYearLast = new Date(now.getFullYear(), 11, 31);
-    return {
-      granularity: 'monthly',
-      start_date: format(prevYearFirst, 'yyyy-MM-dd'),
-      end_date: format(currentYearLast, 'yyyy-MM-dd'),
-      status: 'all',
-    };
+  // Shared dashboard period — default: current calendar month (1st → last day)
+  const [dateRange, setDateRange] = useState(currentMonthRange);
+
+  // Invoice-only filters (status / chart granularity)
+  const [invoiceFilters, setInvoiceFilters] = useState({
+    granularity: 'monthly',
+    status: 'all',
   });
 
   const [heatmapParams, setHeatmapParams] = useState({
@@ -137,40 +268,49 @@ export const AdminDashboard = () => {
     view: 'heatmap',
   });
 
-  // Lead Funnel Report: current year only — Jan 1 to Dec 31; optional assignee filter (same `assignee_ids` shape as sales forecasting)
-  const [leadFunnelFilters, setLeadFunnelFilters] = useState(() => {
-    const now = new Date();
-    const startOfYear = new Date(now.getFullYear(), 0, 1);
-    const endOfYear = new Date(now.getFullYear(), 11, 31);
-    return {
-      start_date: format(startOfYear, 'yyyy-MM-dd'),
-      end_date: format(endOfYear, 'yyyy-MM-dd'),
-      assigneeUserIds: [],
+  // Lead funnel–only: optional assignee filter
+  const [leadFunnelAssigneeIds, setLeadFunnelAssigneeIds] = useState([]);
+
+  const analyticsParams = useMemo(() => {
+    const p = {
+      start_date: dateRange.start_date,
+      end_date: dateRange.end_date,
+      granularity: invoiceFilters.granularity,
     };
-  });
+    if (invoiceFilters.status && invoiceFilters.status !== 'all') {
+      p.status = invoiceFilters.status;
+    }
+    return p;
+  }, [dateRange.start_date, dateRange.end_date, invoiceFilters.granularity, invoiceFilters.status]);
 
   const leadFunnelReportParams = useMemo(() => {
     const p = {
-      start_date: leadFunnelFilters.start_date,
-      end_date: leadFunnelFilters.end_date,
+      start_date: dateRange.start_date,
+      end_date: dateRange.end_date,
     };
-    const ids = leadFunnelFilters.assigneeUserIds;
-    if (ids?.length) {
-      p.assignee_ids = ids.join(',');
+    if (leadFunnelAssigneeIds?.length) {
+      p.assignee_ids = leadFunnelAssigneeIds.join(',');
     }
     return p;
-  }, [leadFunnelFilters.start_date, leadFunnelFilters.end_date, leadFunnelFilters.assigneeUserIds]);
+  }, [dateRange.start_date, dateRange.end_date, leadFunnelAssigneeIds]);
 
-  const { data: analyticsData, isLoading: analyticsLoading, refetch: refetchAnalytics } = useGetAnalyticsQuery(filters);
+  const { data: analyticsData, isLoading: analyticsLoading, refetch: refetchAnalytics } = useGetAnalyticsQuery(analyticsParams);
   const { data: heatmapData, isLoading: heatmapLoading, refetch: refetchHeatmap } = useGetHeatMapQuery(heatmapParams);
 
-  // Sales forecasting: same date filters as dashboard + assignee_ids (all user IDs, like calendar)
+  // Sales forecasting: rolling timeline (not date-range driven); assignees = all techs like calendar
   const salesForecastParams = useMemo(
-    () => ({ ...filters, assignee_ids: assigneeIdsString }),
-    [filters, assigneeIdsString]
+    () => ({ assignee_ids: assigneeIdsString }),
+    [assigneeIdsString]
   );
   const { data: salesForecastData, isLoading: forecastLoading } = useGetSalesForecastingQuery(salesForecastParams);
   const { data: leadFunnelData, isLoading: leadFunnelLoading } = useGetLeadFunnelReportQuery(leadFunnelReportParams);
+
+  const dateRangeLabel = useMemo(() => {
+    const start = parseLocalDate(dateRange.start_date);
+    const end = parseLocalDate(dateRange.end_date);
+    if (!start || !end) return '';
+    return `${format(start, 'MMM d, yyyy')} – ${format(end, 'MMM d, yyyy')}`;
+  }, [dateRange.start_date, dateRange.end_date]);
 
   const [forecastFormulaAnchor, setForecastFormulaAnchor] = useState(null);
 
@@ -278,28 +418,81 @@ export const AdminDashboard = () => {
     );
   };
 
-  const handleFilterChange = (field, value) => {
-    setFilters((prev) => ({ ...prev, [field]: value }));
+  const handleDateRangeChange = (field, value) => {
+    setDateRange((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleLeadFunnelFilterChange = (field, value) => {
-    setLeadFunnelFilters((prev) => ({ ...prev, [field]: value }));
+  const handleInvoiceFilterChange = (field, value) => {
+    setInvoiceFilters((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleApplyFilters = () => {
-    refetchAnalytics();
+  const applyDatePreset = (preset) => {
+    const now = new Date();
+    if (preset === 'this_month') {
+      setDateRange(currentMonthRange());
+    } else if (preset === 'last_month') {
+      const last = subMonths(now, 1);
+      setDateRange({
+        start_date: format(startOfMonth(last), 'yyyy-MM-dd'),
+        end_date: format(endOfMonth(last), 'yyyy-MM-dd'),
+      });
+    } else if (preset === 'this_year') {
+      setDateRange({
+        start_date: format(startOfYear(now), 'yyyy-MM-dd'),
+        end_date: format(endOfYear(now), 'yyyy-MM-dd'),
+      });
+    }
   };
 
-  const formatTrendData = () => {
+  const isPresetActive = (preset) => {
+    const now = new Date();
+    let expected;
+    if (preset === 'this_month') expected = currentMonthRange();
+    else if (preset === 'last_month') {
+      const last = subMonths(now, 1);
+      expected = {
+        start_date: format(startOfMonth(last), 'yyyy-MM-dd'),
+        end_date: format(endOfMonth(last), 'yyyy-MM-dd'),
+      };
+    } else if (preset === 'this_year') {
+      expected = {
+        start_date: format(startOfYear(now), 'yyyy-MM-dd'),
+        end_date: format(endOfYear(now), 'yyyy-MM-dd'),
+      };
+    }
+    return (
+      expected &&
+      dateRange.start_date === expected.start_date &&
+      dateRange.end_date === expected.end_date
+    );
+  };
+
+  const formatTrendData = useMemo(() => {
     if (!analyticsData?.trends) return [];
-    return analyticsData.trends.map((trend) => ({
-      period: format(new Date(trend.period), 'MMM yyyy'),
-      Paid: trend.total_paid,
-      Unpaid: trend.total_due,
-    }));
-  };
+    const rangeStart = parseLocalDate(dateRange.start_date);
+    const rangeEnd = parseLocalDate(dateRange.end_date);
+    const granularity = invoiceFilters.granularity;
+    return analyticsData.trends.map((trend) => {
+      const labels = formatTrendPeriodLabels(trend, granularity, rangeStart, rangeEnd);
+      return {
+        periodKey: labels.key,
+        period: labels.axis,
+        periodFull: labels.full,
+        Paid: trend.total_paid,
+        Unpaid: trend.total_due,
+      };
+    });
+  }, [analyticsData?.trends, dateRange.start_date, dateRange.end_date, invoiceFilters.granularity]);
 
-  const formatStatusData = () => {
+  const trendLabelByKey = useMemo(() => {
+    const map = {};
+    formatTrendData.forEach((row) => {
+      map[row.periodKey] = row.period;
+    });
+    return map;
+  }, [formatTrendData]);
+
+  const formatStatusData = useMemo(() => {
     if (!analyticsData?.status_distribution) return [];
     return Object.entries(analyticsData.status_distribution)
       .filter(([_, value]) => value.count > 0)
@@ -309,7 +502,43 @@ export const AdminDashboard = () => {
         amount: value.total,
         color: STATUS_COLORS[key] || '#64748b',
       }));
-  };
+  }, [analyticsData?.status_distribution]);
+
+  const statusDataTotal = useMemo(
+    () => formatStatusData.reduce((s, d) => s + d.value, 0),
+    [formatStatusData]
+  );
+
+  const trendXAxisInterval = useMemo(() => {
+    const n = formatTrendData.length;
+    if (n <= 8) return 0;
+    if (n <= 16) return 1;
+    if (n <= 32) return 2;
+    return Math.ceil(n / 12) - 1;
+  }, [formatTrendData.length]);
+
+  const granularityHint = {
+    daily: 'Each bar is one day',
+    weekly: 'Each bar is a week (from–to dates)',
+    monthly: 'Each bar is one calendar month',
+    yearly: 'Each bar is one year',
+  }[invoiceFilters.granularity] || 'Paid vs outstanding over time';
+
+  const unpaidBreakdown = useMemo(() => {
+    const fromApi = analyticsData?.paid_unpaid_overview?.unpaid_breakdown;
+    if (Array.isArray(fromApi) && fromApi.length > 0) return fromApi;
+    if (!analyticsData?.status_distribution) return [];
+    return Object.entries(analyticsData.status_distribution)
+      .filter(([key]) => !['paid', 'payment_processing', 'due', 'overdue'].includes(key))
+      .map(([key, value]) => ({
+        status: key,
+        label: value.label,
+        count: value.count,
+        total: value.total,
+      }))
+      .filter((row) => row.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [analyticsData?.paid_unpaid_overview?.unpaid_breakdown, analyticsData?.status_distribution]);
 
   const getLoadLevelColor = (level) => {
     switch (level) {
@@ -338,14 +567,17 @@ export const AdminDashboard = () => {
               Dashboard
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Invoice analytics and technician workload overview
+              Invoice analytics, lead funnel, and workload overview
             </Typography>
           </Box>
         </Box>
 
+        {/* Shared period skeleton */}
+        <Skeleton variant="rectangular" height={88} sx={{ mb: 3, borderRadius: 2.5, bgcolor: 'rgba(15,118,110,0.08)' }} />
+
         {/* Summary Cards Skeleton - Matching actual design */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 mb-4">
-          {[1, 2, 3, 4, 5, 6].map((i) => (
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 mb-4">
+          {[1, 2, 3, 4, 5, 6, 7].map((i) => (
             <div key={i} className="shadow-sm bg-gradient-to-br from-gray-100/60 to-gray-100/10 rounded-lg">
               <Box className="flex items-center justify-between px-4 pt-4">
                 <Skeleton variant="text" width="60%" height={16} sx={{ bgcolor: 'rgba(0,0,0,0.1)' }} />
@@ -468,6 +700,19 @@ export const AdminDashboard = () => {
     );
   }
 
+  if (!analyticsData?.summary) {
+    return (
+      <Box sx={{ p: { xs: 2, sm: 3 } }}>
+        <Typography variant="h5" gutterBottom>
+          Dashboard
+        </Typography>
+        <Alert severity="error" sx={{ mt: 2 }}>
+          Could not load dashboard data. Make sure the backend is running on port 8000, then refresh this page.
+        </Alert>
+      </Box>
+    );
+  }
+
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns}>
       <Box>
@@ -485,7 +730,7 @@ export const AdminDashboard = () => {
               Dashboard
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Invoice analytics and technician workload overview
+              Invoice analytics, lead funnel, and workload overview
             </Typography>
           </Box>
           <IconButton 
@@ -500,87 +745,204 @@ export const AdminDashboard = () => {
           </IconButton>
         </Box>
 
-        {/* Filters Section - Responsive */}
-        <Card sx={{ mb: 3, boxShadow: 1 }}>
-          <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-            <Typography variant="subtitle1" fontWeight="600" gutterBottom>
-              Filters
+        {/* Shared dashboard period — applies to invoices + lead funnel */}
+        <Paper
+          elevation={0}
+          sx={{
+            mb: 3,
+            p: { xs: 2, sm: 2.5 },
+            borderRadius: 2.5,
+            border: '1px solid',
+            borderColor: 'rgba(15, 118, 110, 0.22)',
+            background: 'linear-gradient(135deg, rgba(240,253,250,0.95) 0%, rgba(255,255,255,0.98) 55%, rgba(248,250,252,0.9) 100%)',
+            boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 118, 110, 0.06)',
+          }}
+        >
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: { xs: 'column', md: 'row' },
+              alignItems: { xs: 'stretch', md: 'center' },
+              justifyContent: 'space-between',
+              gap: 2,
+            }}
+          >
+            <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5, minWidth: 0 }}>
+              <Box
+                sx={{
+                  width: 42,
+                  height: 42,
+                  borderRadius: 2,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  bgcolor: 'rgba(15, 118, 110, 0.12)',
+                  color: '#0f766e',
+                  flexShrink: 0,
+                }}
+              >
+                <CalendarDays size={20} />
+              </Box>
+              <Box sx={{ minWidth: 0 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1, mb: 0.25 }}>
+                  <Typography variant="subtitle1" fontWeight={700} sx={{ color: '#0f172a', lineHeight: 1.2 }}>
+                    Dashboard period
+                  </Typography>
+                  <Chip
+                    size="small"
+                    label="Shared filter"
+                    sx={{
+                      height: 22,
+                      fontWeight: 600,
+                      fontSize: '0.7rem',
+                      bgcolor: 'rgba(15, 118, 110, 0.12)',
+                      color: '#0f766e',
+                    }}
+                  />
+                </Box>
+                <Typography variant="body2" color="text.secondary" sx={{ fontSize: '0.8125rem' }}>
+                  Applies to invoice analytics and lead funnel · {dateRangeLabel}
+                </Typography>
+              </Box>
+            </Box>
+
+            <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
+              {['this_month', 'last_month', 'this_year'].map((preset) => {
+                const labels = { this_month: 'This month', last_month: 'Last month', this_year: 'This year' };
+                const active = isPresetActive(preset);
+                return (
+                  <Chip
+                    key={preset}
+                    label={labels[preset]}
+                    size="small"
+                    onClick={() => applyDatePreset(preset)}
+                    variant={active ? 'filled' : 'outlined'}
+                    sx={{
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      ...(active
+                        ? { bgcolor: '#0f766e', color: '#fff', '&:hover': { bgcolor: '#0d9488' } }
+                        : { borderColor: 'rgba(15, 118, 110, 0.35)', color: '#0f766e' }),
+                    }}
+                  />
+                );
+              })}
+              <DatePicker
+                label="From"
+                value={parseLocalDate(dateRange.start_date)}
+                onChange={(date) =>
+                  date && handleDateRangeChange('start_date', format(date, 'yyyy-MM-dd'))
+                }
+                slotProps={{
+                  textField: {
+                    size: 'small',
+                    sx: {
+                      minWidth: { xs: '100%', sm: 150 },
+                      bgcolor: 'background.paper',
+                      '& .MuiOutlinedInput-root': { borderRadius: 1.5 },
+                    },
+                  },
+                }}
+              />
+              <DatePicker
+                label="To"
+                value={parseLocalDate(dateRange.end_date)}
+                onChange={(date) =>
+                  date && handleDateRangeChange('end_date', format(date, 'yyyy-MM-dd'))
+                }
+                slotProps={{
+                  textField: {
+                    size: 'small',
+                    sx: {
+                      minWidth: { xs: '100%', sm: 150 },
+                      bgcolor: 'background.paper',
+                      '& .MuiOutlinedInput-root': { borderRadius: 1.5 },
+                    },
+                  },
+                }}
+              />
+            </Box>
+          </Box>
+        </Paper>
+
+        {/* Invoice section toolbar — status + chart granularity only */}
+        <Box
+          sx={{
+            mb: 2,
+            display: 'flex',
+            flexDirection: { xs: 'column', sm: 'row' },
+            alignItems: { xs: 'stretch', sm: 'center' },
+            justifyContent: 'space-between',
+            gap: 1.5,
+          }}
+        >
+          <Box>
+            <Typography variant="subtitle1" fontWeight={700} sx={{ color: '#0f172a' }}>
+              Invoice analytics
             </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Granularity</InputLabel>
-                  <Select
-                    value={filters.granularity}
-                    label="Granularity"
-                    onChange={(e) => handleFilterChange('granularity', e.target.value)}
-                  >
-                    <MenuItem value="daily">Daily</MenuItem>
-                    <MenuItem value="weekly">Weekly</MenuItem>
-                    <MenuItem value="monthly">Monthly</MenuItem>
-                    <MenuItem value="yearly">Yearly</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <DatePicker
-                  label="Start Date"
-                  value={parseLocalDate(filters.start_date)}
-                  onChange={(date) =>
-                    date && handleFilterChange('start_date', format(date, 'yyyy-MM-dd'))
-                  }
-                  renderInput={(params) => <TextField {...params} fullWidth size="small" />}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <DatePicker
-                  label="End Date"
-                  value={parseLocalDate(filters.end_date)}
-                  onChange={(date) =>
-                    date && handleFilterChange('end_date', format(date, 'yyyy-MM-dd'))
-                  }
-                  renderInput={(params) => <TextField {...params} fullWidth size="small" />}
-                  slotProps={{ textField: { size: 'small', fullWidth: true } }}
-                />
-              </Grid>
-
-              <Grid item xs={12} sm={6} md={3}>
-                <FormControl fullWidth size="small">
-                  <InputLabel>Status</InputLabel>
-                  <Select
-                    value={filters.status}
-                    label="Status"
-                    onChange={(e) => handleFilterChange('status', e.target.value)}
-                  >
-                    <MenuItem value="all">All</MenuItem>
-                    <MenuItem value="paid">Paid</MenuItem>
-                    <MenuItem value="overdue">Overdue</MenuItem>
-                    <MenuItem value="draft">Draft</MenuItem>
-                    <MenuItem value="sent">Sent</MenuItem>
-                    <MenuItem value="void">Void</MenuItem>
-                  </Select>
-                </FormControl>
-              </Grid>
-
-              <Grid item xs={12}>
-                <Button 
-                  variant="contained" 
-                  onClick={handleApplyFilters}
-                  size={isMobile ? 'small' : 'medium'}
-                  fullWidth={isMobile}
-                >
-                  Apply Filters
-                </Button>
-              </Grid>
-            </Grid>
-          </CardContent>
-        </Card>
+            <Typography variant="caption" color="text.secondary">
+              Status and chart detail for this section only · {granularityHint}
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.25 }}>
+            <Box
+              sx={{
+                display: 'inline-flex',
+                flexWrap: 'wrap',
+                gap: 0.5,
+                p: 0.5,
+                borderRadius: 2,
+                bgcolor: 'rgba(15, 118, 110, 0.06)',
+                border: '1px solid',
+                borderColor: 'rgba(15, 118, 110, 0.14)',
+              }}
+            >
+              {GRANULARITY_OPTIONS.map((opt) => {
+                const active = invoiceFilters.granularity === opt.value;
+                return (
+                  <Chip
+                    key={opt.value}
+                    label={opt.label}
+                    size="small"
+                    onClick={() => handleInvoiceFilterChange('granularity', opt.value)}
+                    variant={active ? 'filled' : 'outlined'}
+                    sx={{
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      border: 'none',
+                      ...(active
+                        ? { bgcolor: '#0f766e', color: '#fff', '&:hover': { bgcolor: '#0d9488' } }
+                        : {
+                            bgcolor: 'transparent',
+                            color: '#0f766e',
+                            '&:hover': { bgcolor: 'rgba(15, 118, 110, 0.1)' },
+                          }),
+                    }}
+                  />
+                );
+              })}
+            </Box>
+            <FormControl size="small" sx={{ minWidth: 140 }}>
+              <InputLabel>Invoice status</InputLabel>
+              <Select
+                value={invoiceFilters.status}
+                label="Invoice status"
+                onChange={(e) => handleInvoiceFilterChange('status', e.target.value)}
+                sx={{ bgcolor: 'background.paper', borderRadius: 1.5 }}
+              >
+                <MenuItem value="all">All</MenuItem>
+                <MenuItem value="paid">Paid</MenuItem>
+                <MenuItem value="overdue">Overdue</MenuItem>
+                <MenuItem value="draft">Draft</MenuItem>
+                <MenuItem value="sent">Sent</MenuItem>
+                <MenuItem value="void">Void</MenuItem>
+              </Select>
+            </FormControl>
+          </Box>
+        </Box>
 
         {/* Summary Cards - Responsive Grid */}
-        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 mb-4">
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-7 mb-4">
           <div className="shadow-sm bg-gradient-to-br from-stone-200/60 to-from-stone-200/10 rounded-lg">
             <Box className="flex items-center justify-between px-4 pt-4">
               <Typography variant="body2" color="text.secondary" fontWeight="500">
@@ -654,6 +1016,31 @@ export const AdminDashboard = () => {
               <p className="text-xs text-muted-foreground">
                 {((analyticsData.paid_unpaid_overview.unpaid.total / analyticsData.summary.total_amount * 100) || 0).toFixed(1)}% pending
               </p>
+              {unpaidBreakdown.length > 0 && (
+                <Box sx={{ mt: 1.5, pt: 1, borderTop: '1px solid', borderColor: 'divider' }}>
+                  <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 0.75, fontWeight: 600 }}>
+                    By status
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                    {unpaidBreakdown.map((row) => (
+                      <Chip
+                        key={row.status}
+                        size="small"
+                        label={`${row.label} ${row.count}`}
+                        title={`${row.label}: ${row.count} · ${formatCurrency(row.total)}`}
+                        sx={{
+                          height: 22,
+                          fontSize: '0.65rem',
+                          fontWeight: 600,
+                          bgcolor: 'rgba(249, 115, 22, 0.1)',
+                          color: '#c2410c',
+                          '& .MuiChip-label': { px: 0.75 },
+                        }}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              )}
             </CardContent>
           </div>
 
@@ -741,6 +1128,34 @@ export const AdminDashboard = () => {
             </CardContent>
           </div>
 
+          <div className="shadow-sm bg-gradient-to-br from-slate-200/60 to-slate-200/10 rounded-lg">
+            <Box className="flex flex-row items-center justify-between px-4 pt-4">
+              <Typography variant="body2" color="text.secondary" fontWeight="500">Void</Typography>
+              <div className="h-8 w-8 rounded-full bg-slate-400/20 flex items-center justify-center">
+                <Ban className="h-4 w-4 text-slate-500" />
+              </div>
+            </Box>
+            <CardContent >
+              <div className="text-3xl font-bold">{analyticsData?.status_distribution.void?.count || 0}</div>
+              <p className="text-sm font-medium text-slate-600 mt-0.5">
+                {formatCurrency(analyticsData?.status_distribution.void?.total || 0)}
+              </p>
+              <div className="mt-2">
+                <Box mt={2}>
+                  <ProgressBar 
+                    variant="determinate" 
+                    value={(analyticsData?.status_distribution.void?.total / analyticsData.summary.total_amount * 100) || 0} 
+                    trackcolor="#f1f5f9"
+                    barcolor="#64748b"
+                  />
+                </Box>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                {((analyticsData?.status_distribution.void?.total / analyticsData.summary.total_amount * 100) || 0).toFixed(1)}% of total amount
+              </p>
+            </CardContent>
+          </div>
+
           {/* <div className="shadow-sm bg-gradient-to-br from-violet-100/60 to-violet-100/10 rounded-lg">
             <Box className="flex flex-row items-center justify-between px-4 pt-4">
               <Typography variant="body2" color="text.secondary" fontWeight="500">Payment Processing</Typography>
@@ -776,36 +1191,81 @@ export const AdminDashboard = () => {
 
         {/* Charts Section - Responsive */}
         <div className="grid gap-4 grid-cols-1 lg:grid-cols-2 mb-4">
-          <Card sx={{ boxShadow: 1 }}>
+          <Card
+            sx={{
+              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04)',
+              border: '1px solid',
+              borderColor: 'rgba(15, 23, 42, 0.06)',
+              borderRadius: 2.5,
+            }}
+          >
             <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-              <Typography variant="subtitle1" fontWeight="600" gutterBottom>
-                Revenue Trends
-              </Typography>
-              <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
-                Paid vs Outstanding over time
-              </Typography>
-              <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
-                <BarChart data={formatTrendData()}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                  <XAxis 
-                    dataKey="period" 
-                    tick={{ fontSize: isMobile ? 10 : 12 }}
-                    angle={isMobile ? -45 : 0}
-                    textAnchor={isMobile ? 'end' : 'middle'}
-                    height={isMobile ? 60 : 30}
+              <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 1, mb: 0.5 }}>
+                <Box>
+                  <Typography variant="subtitle1" fontWeight={700} sx={{ color: '#0f172a' }}>
+                    Revenue Trends
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" display="block">
+                    Paid vs outstanding · {GRANULARITY_OPTIONS.find((o) => o.value === invoiceFilters.granularity)?.label}
+                  </Typography>
+                </Box>
+                <Chip
+                  size="small"
+                  label={GRANULARITY_OPTIONS.find((o) => o.value === invoiceFilters.granularity)?.label || 'Monthly'}
+                  sx={{
+                    height: 22,
+                    fontWeight: 600,
+                    fontSize: '0.7rem',
+                    bgcolor: 'rgba(15, 118, 110, 0.1)',
+                    color: '#0f766e',
+                  }}
+                />
+              </Box>
+              <ResponsiveContainer width="100%" height={isMobile ? 270 : 320}>
+                <BarChart data={formatTrendData} margin={{ top: 8, right: 8, left: 0, bottom: formatTrendData.length > 8 ? 28 : 8 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" vertical={false} />
+                  <XAxis
+                    dataKey="periodKey"
+                    tickFormatter={(key) => trendLabelByKey[key] || key}
+                    tick={{ fontSize: isMobile ? 9 : 11, fill: '#64748b' }}
+                    angle={formatTrendData.length > 6 || isMobile ? -35 : 0}
+                    textAnchor={formatTrendData.length > 6 || isMobile ? 'end' : 'middle'}
+                    height={formatTrendData.length > 6 || isMobile ? 70 : 36}
+                    interval={trendXAxisInterval}
+                    axisLine={{ stroke: '#e2e8f0' }}
+                    tickLine={false}
                   />
-                  <YAxis tick={{ fontSize: isMobile ? 10 : 12 }} />
-                  <RechartsTooltip formatter={(value) => formatCurrency(Number(value))} />
-                  <Legend wrapperStyle={{ fontSize: isMobile ? 10 : 12 }} />
-                  <Bar dataKey="Paid" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                  <Bar dataKey="Unpaid" fill="#f97316" radius={[4, 4, 0, 0]} />
+                  <YAxis
+                    tick={{ fontSize: isMobile ? 10 : 12, fill: '#64748b' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={isMobile ? 44 : 56}
+                  />
+                  <RechartsTooltip
+                    cursor={{ fill: 'rgba(15, 118, 110, 0.06)' }}
+                    content={<RevenueTrendTooltip formatCurrency={formatCurrency} />}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: isMobile ? 10 : 12, paddingTop: 8 }}
+                    iconType="circle"
+                    iconSize={8}
+                  />
+                  <Bar dataKey="Paid" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={36} />
+                  <Bar dataKey="Unpaid" fill="#f97316" radius={[4, 4, 0, 0]} maxBarSize={36} />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
           </Card>
-          <Card sx={{ boxShadow: 1 }}>
+          <Card
+            sx={{
+              boxShadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 8px 24px rgba(15, 23, 42, 0.04)',
+              border: '1px solid',
+              borderColor: 'rgba(15, 23, 42, 0.06)',
+              borderRadius: 2.5,
+            }}
+          >
             <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
-              <Typography variant="subtitle1" fontWeight="600" gutterBottom>
+              <Typography variant="subtitle1" fontWeight={700} gutterBottom sx={{ color: '#0f172a' }}>
                 Invoice Status Distribution
               </Typography>
               <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
@@ -814,7 +1274,7 @@ export const AdminDashboard = () => {
               <ResponsiveContainer width="100%" height={isMobile ? 280 : 340}>
                 <PieChart margin={{ top: 8, right: 8, bottom: 8, left: 8 }}>
                   <Pie
-                    data={formatStatusData()}
+                    data={formatStatusData}
                     cx="50%"
                     cy="45%"
                     labelLine={false}
@@ -823,16 +1283,16 @@ export const AdminDashboard = () => {
                     fill="#8884d8"
                     dataKey="value"
                   >
-                    {formatStatusData().map((entry, index) => (
+                    {formatStatusData.map((entry, index) => (
                       <Cell key={`cell-${index}`} fill={entry.color} />
                     ))}
                   </Pie>
                   <RechartsTooltip
                     formatter={(value, name, props) => [
-                      `${value} (${((value / formatStatusData().reduce((s, d) => s + d.value, 0)) * 100).toFixed(1)}%)`,
+                      `${value} (${statusDataTotal ? ((value / statusDataTotal) * 100).toFixed(1) : '0'}%)`,
                       props.payload.name,
                     ]}
-                    contentStyle={{ fontSize: 13, padding: '10px 14px' }}
+                    contentStyle={{ fontSize: 13, padding: '10px 14px', borderRadius: 8 }}
                     itemStyle={{ padding: '4px 0' }}
                   />
                 </PieChart>
@@ -842,9 +1302,8 @@ export const AdminDashboard = () => {
                   By status
                 </Typography>
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5 }}>
-                  {formatStatusData().map((entry, index) => {
-                    const total = formatStatusData().reduce((s, d) => s + d.value, 0);
-                    const pct = total ? ((entry.value / total) * 100).toFixed(1) : '0';
+                  {formatStatusData.map((entry, index) => {
+                    const pct = statusDataTotal ? ((entry.value / statusDataTotal) * 100).toFixed(1) : '0';
                     return (
                       <Box
                         key={`legend-${index}`}
@@ -876,41 +1335,29 @@ export const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* Lead Funnel Report - Replace Top Customers position */}
+        {/* Lead Funnel Report */}
           <Card sx={{ mb: 3, boxShadow: 1 }}>
             <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
               <Box sx={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 2, mb: 2 }}>
-                <Typography variant="subtitle1" fontWeight="600">
-                  Lead Funnel Report
-                </Typography>
-                <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
-                  <LocalizationProvider dateAdapter={AdapterDateFns}>
-                    <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 2 }}>
-                      <DatePicker
-                        label="Start date"
-                        value={parseLocalDate(leadFunnelFilters.start_date)}
-                        onChange={(date) => date && handleLeadFunnelFilterChange('start_date', format(date, 'yyyy-MM-dd'))}
-                        slotProps={{ textField: { size: 'small', sx: { minWidth: 140 } } }}
-                      />
-                      <DatePicker
-                        label="End date"
-                        value={parseLocalDate(leadFunnelFilters.end_date)}
-                        onChange={(date) => date && handleLeadFunnelFilterChange('end_date', format(date, 'yyyy-MM-dd'))}
-                        slotProps={{ textField: { size: 'small', sx: { minWidth: 140 } } }}
-                      />
-                    </Box>
-                  </LocalizationProvider>
+                <Box>
+                  <Typography variant="subtitle1" fontWeight="600">
+                    Lead Funnel Report
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Uses dashboard period · assignees filter this section only
+                  </Typography>
+                </Box>
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 1.5 }}>
                   {canViewStaff && (
                     <FormControl size="small" sx={{ minWidth: 200, maxWidth: { xs: '100%', sm: 320 } }}>
                       <InputLabel id="lead-funnel-assignees-label">Assignees</InputLabel>
                       <Select
                         labelId="lead-funnel-assignees-label"
                         multiple
-                        value={leadFunnelFilters.assigneeUserIds}
+                        value={leadFunnelAssigneeIds}
                         onChange={(e) => {
                           const v = e.target.value;
-                          handleLeadFunnelFilterChange(
-                            'assigneeUserIds',
+                          setLeadFunnelAssigneeIds(
                             typeof v === 'string' ? v.split(',').filter(Boolean) : [...v]
                           );
                         }}
@@ -961,11 +1408,11 @@ export const AdminDashboard = () => {
                       </Select>
                     </FormControl>
                   )}
-                  {canViewStaff && leadFunnelFilters.assigneeUserIds?.length > 0 && (
+                  {canViewStaff && leadFunnelAssigneeIds?.length > 0 && (
                     <Button
                       size="small"
                       variant="text"
-                      onClick={() => handleLeadFunnelFilterChange('assigneeUserIds', [])}
+                      onClick={() => setLeadFunnelAssigneeIds([])}
                       sx={{ textTransform: 'none', flexShrink: 0 }}
                     >
                       Clear assignees
@@ -1077,7 +1524,7 @@ export const AdminDashboard = () => {
                           </Box>
                           <Box>
                             <Typography variant="body2" fontWeight="600">
-                              Contacts created on {format(parseLocalDate(leadFunnelFilters.start_date), 'MMM d, yyyy')} – {format(parseLocalDate(leadFunnelFilters.end_date), 'MMM d, yyyy')}
+                              Contacts created on {format(parseLocalDate(dateRange.start_date), 'MMM d, yyyy')} – {format(parseLocalDate(dateRange.end_date), 'MMM d, yyyy')}
                             </Typography>
                           </Box>
                         </Box>
@@ -1340,8 +1787,8 @@ export const AdminDashboard = () => {
                         borderColor: 'info.main'
                       }
                     }}>
-                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 1.5 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0, flex: 1 }}>
                           <Box sx={{ 
                             width: 36, 
                             height: 36, 
@@ -1349,20 +1796,21 @@ export const AdminDashboard = () => {
                             bgcolor: 'rgba(25, 118, 210, 0.1)',
                             display: 'flex',
                             alignItems: 'center',
-                            justifyContent: 'center'
+                            justifyContent: 'center',
+                            flexShrink: 0,
                           }}>
                             <Clock sx={{ color: 'info.main', fontSize: 18 }} />
                           </Box>
-                          <Box>
-                            <Typography variant="body2" fontWeight="600">
-                              {leadFunnelData.lead_funnel.scheduled_jobs.label}
+                          <Box sx={{ minWidth: 0 }}>
+                            <Typography variant="body2" fontWeight="600" noWrap>
+                              Scheduled Jobs
                             </Typography>
-                            <Typography variant="caption" color="text.secondary">
-                              Upcoming jobs
+                            <Typography variant="caption" color="text.secondary" display="block" noWrap>
+                              Active in range (not completed)
                             </Typography>
                           </Box>
                         </Box>
-                        <Box sx={{ textAlign: 'right' }}>
+                        <Box sx={{ textAlign: 'right', flexShrink: 0 }}>
                           <Chip 
                             label={leadFunnelData.lead_funnel.scheduled_jobs.count} 
                             color="info" 
@@ -1406,7 +1854,7 @@ export const AdminDashboard = () => {
                               {leadFunnelData.lead_funnel.in_progress_jobs.label}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              Currently active
+                              Scheduled in range, in progress
                             </Typography>
                           </Box>
                         </Box>
@@ -1454,7 +1902,7 @@ export const AdminDashboard = () => {
                               {leadFunnelData.lead_funnel.cancelled_jobs.label}
                             </Typography>
                             <Typography variant="caption" color="text.secondary">
-                              Cancelled
+                              Cancelled + on hold, scheduled in range
                             </Typography>
                           </Box>
                         </Box>
@@ -1501,7 +1949,7 @@ export const AdminDashboard = () => {
                               {leadFunnelData.lead_funnel.closed_jobs.label}
                             </Typography>
                             <Typography variant="caption" color="success.dark">
-                              Revenue generated
+                              Completed jobs scheduled in range
                             </Typography>
                           </Box>
                         </Box>

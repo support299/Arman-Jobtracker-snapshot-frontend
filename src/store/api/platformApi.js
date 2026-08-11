@@ -4,7 +4,7 @@ import { axiosBaseQuery, BASE_URL } from '../axios/axios';
 export const platformApi = createApi({
   reducerPath: 'platformApi',
   baseQuery: axiosBaseQuery({ baseUrl: `${BASE_URL}/platform/` }),
-  tagTypes: ['PlatformDashboard', 'PlatformAccount', 'PlatformHealth', 'PlatformAudit', 'PlatformCompany', 'PlatformOnboarding'],
+  tagTypes: ['PlatformDashboard', 'PlatformAccount', 'PlatformHealth', 'PlatformAudit', 'PlatformCompany', 'PlatformOnboarding', 'PlatformAgencyOnboarding'],
   endpoints: (builder) => ({
     getPlatformDashboard: builder.query({
       query: () => ({ url: 'dashboard/' }),
@@ -164,6 +164,18 @@ export const platformApi = createApi({
       }),
       invalidatesTags: ['PlatformOnboarding', 'PlatformAudit'],
     }),
+    getPlatformAgencyOnboardingStatus: builder.query({
+      query: () => ({ url: 'onboarding/agency/' }),
+      providesTags: ['PlatformAgencyOnboarding'],
+    }),
+    startPlatformAgencyOnboarding: builder.mutation({
+      query: () => ({
+        url: 'onboarding/agency/',
+        method: 'POST',
+        data: {},
+      }),
+      invalidatesTags: ['PlatformAgencyOnboarding', 'PlatformOnboarding', 'PlatformCompany', 'PlatformAudit'],
+    }),
   }),
 });
 
@@ -190,4 +202,6 @@ export const {
   useGetPlatformCompanyQuery,
   useGetPlatformOnboardingStatusQuery,
   useStartPlatformOnboardingMutation,
+  useGetPlatformAgencyOnboardingStatusQuery,
+  useStartPlatformAgencyOnboardingMutation,
 } = platformApi;

@@ -30,10 +30,16 @@ export function buildInvoiceUrl(invoiceId, baseUrl) {
 
 /**
  * Resolve the invoice link shown in job UI.
+ * Prefer API invoice_view_url (app payment page), then build from invoice_id / invoice_url.
  */
 export function resolveJobInvoiceUrl(job, invoiceLinkBaseUrl) {
   if (!job) return null;
   if (job.invoice_view_url) return job.invoice_view_url;
+  if (job.id && (job.invoice_id || job.invoice_url)) {
+    if (typeof window !== 'undefined' && window.location?.origin) {
+      return `${window.location.origin}/invoice/${job.id}`;
+    }
+  }
   if (job.invoice_id) {
     return buildInvoiceUrl(job.invoice_id, invoiceLinkBaseUrl);
   }
