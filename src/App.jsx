@@ -125,6 +125,7 @@ function App() {
                   {/* Public Routes */}
                   <Route path="/" element={<Navigate to="/booking" replace />} />
                   <Route path="/booking" element={<BookingWizard />} />
+                  <Route path="/public-quote" element={<BookingWizard mode="public" />} />
                   <Route path="/quote/details/:id" element={<QuoteDetailsPage />} />
                   <Route path="/quote/original/:id" element={<OriginalProposalPage />} />
                   <Route path="/invoice/:jobId" element={<InvoicePaymentPage />} />

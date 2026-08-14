@@ -86,7 +86,7 @@ const calculateTotalSelectedPrice = (selectedPackages, quoteData) => {
     }, 0);
   };
 
-export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setTermsAccepted, additionalNotes, setAdditionalNotes, handleSignatureEnd, setSignature, signatureTimestamp, isStepComplete, handleNext, setActiveStep, setBookingData, initialBookingData, readOnly = false }) => {
+export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setTermsAccepted, additionalNotes, setAdditionalNotes, handleSignatureEnd, setSignature, signatureTimestamp, isStepComplete, handleNext, setActiveStep, setBookingData, initialBookingData, readOnly = false, isPublicMode = false }) => {
   const { profile, locationId, formatPrice } = useAccountBranding();
   const termsHref = locationId
     ? `/terms?location_id=${encodeURIComponent(locationId)}`
@@ -270,10 +270,14 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
   }, [quoteData, isLoading, data.quoteDetails, onUpdate]);
 
   useEffect(() => {
+    if (isPublicMode) {
+      setCustomProducts([]);
+      return;
+    }
     if (quoteData?.custom_products) {
       setCustomProducts(quoteData.custom_products);
     }
-  }, [quoteData]);
+  }, [quoteData, isPublicMode]);
 
   // Load additional notes from quoteData when it's available (only if not already set)
   useEffect(() => {
@@ -1153,8 +1157,8 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
           </Card>
         ))}
 
-        {/* Custom Products Section */}
-        {customProducts.length > 0 && (
+        {/* Custom Products Section — technician only */}
+        {!isPublicMode && customProducts.length > 0 && (
           <Card sx={{ mb: 3 }}>
             <CardContent sx={{ p: 3 }}>
               <Typography variant="h6" gutterBottom fontWeight={600} sx={{ color: '#023c8f' }}>
@@ -1302,8 +1306,8 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
           <CardContent sx={{ p: 3 }}>
             <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
               <Box display="flex" alignItems="center" gap={1}>
-                <Typography variant="h6" fontWeight={600} sx={{ color: '#023c8f' }}>
-                  Additional Notes
+                <Typography variant="h6" fontWeight={600} sx={{ color: isPublicMode ? '#0f766e' : '#023c8f' }}>
+                  {isPublicMode ? 'Your Notes' : 'Additional Notes'}
                 </Typography>
                 {isNotesSubmitted && (
                   <Lock sx={{ color: '#666', fontSize: 18 }} />
@@ -1514,8 +1518,8 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
                 </Box>
             )}
 
-            {/* Custom Products in Summary */}
-            {customProducts.filter((p)=>p.is_active===true).length > 0 && (
+            {/* Custom Products in Summary — technician only */}
+            {!isPublicMode && customProducts.filter((p)=>p.is_active===true).length > 0 && (
               <Box mb={2}>
                 <Typography variant="subtitle2" fontWeight={600} sx={{ color: '#023c8f', mb: 1 }}>
                   Custom Products
@@ -1743,7 +1747,8 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
         </Card>
       </Container>
 
-      {/* Custom Product Dialog */}
+      {/* Custom Product Dialog — technician only */}
+      {!isPublicMode && (
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} fullWidth maxWidth="sm">
         <DialogTitle>{editMode ? 'Update' : 'Add'} Custom Product</DialogTitle>
         <DialogContent>
@@ -1777,6 +1782,7 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
           </Button>
         </DialogActions>
       </Dialog>
+      )}
 
       {/* Delete Service Confirmation Dialog */}
       <Dialog open={deleteServiceDialogOpen} onClose={() => setDeleteServiceDialogOpen(false)} maxWidth="sm" fullWidth>

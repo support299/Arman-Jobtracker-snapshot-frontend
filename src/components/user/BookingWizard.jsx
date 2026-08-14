@@ -4,15 +4,16 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { CheckCircle, Circle, Loader2 } from "lucide-react"
 import { useCreateQuoteMutation } from "../../store/api/user/quotesApi"
-import { useNavigate, useSearchParams } from "react-router-dom"
+import { useNavigate, useSearchParams, useLocation } from "react-router-dom"
 import UserInfoForm from "./forms/UserInfoForm"
+import PublicCustomerInfoForm from "./forms/PublicCustomerInfoForm"
 import ServiceSelectionForm from "./forms/ServiceSelectionForm"
 import PackageSelectionForm from "./forms/PackageSelectionForm"
 import QuestionsForm from "./forms/QuestionsForm"
 import CheckoutSummary from "./forms/CheckoutSummary"
 import MultiServiceSelectionForm from "./forms/MultiServiceSelectionForm"
 import ImageUploadForm from "./forms/ImageUploadForm"
-import { useCreateQuestionResponsesMutation, useCreateServiceToSubmissionMutation, useCreateSubmissionMutation, useGetQuoteDetailsQuery, useSubmitOnlyCustomProductsMutation, useSubmitQuoteMutation, useUpdateSubmissionMutation } from "../../store/api/user/quoteApi"
+import { useCreateQuestionResponsesMutation, useCreateServiceToSubmissionMutation, useCreateSubmissionMutation, useStartPublicSubmissionMutation, useGetQuoteDetailsQuery, useSubmitOnlyCustomProductsMutation, useSubmitQuoteMutation, useUpdateSubmissionMutation, useUpdateAdditionalDataMutation } from "../../store/api/user/quoteApi"
 import { useDispatch } from "react-redux"
 import { resetBookingData } from "../../store/slices/bookingSlice"
 import { Box, Typography, Card, CardContent } from "@mui/material"
@@ -68,11 +69,14 @@ function buildQuoteDetailsHref(searchParams, submissionId, extraParams = {}) {
   return qs ? `/quote/details/${id}?${qs}` : `/quote/details/${id}`;
 }
 
-export const BookingWizard = () => {
+export const BookingWizard = ({ mode } = {}) => {
   const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const isPublicMode = mode === 'public' || location.pathname.startsWith('/public-quote');
   const { locationId: brandingLocationId } = useAccountBranding();
   const submissionIdFromUrl = searchParams.get("submission_id");
   const paramEmail = searchParams.get("email")
+  const ghlLocationId = resolveBrandingLocationId(searchParams) || brandingLocationId;
 
   const [signature, setSignature] = useState('');
   const [signatureTimestamp, setSignatureTimestamp] = useState(null);
@@ -129,6 +133,10 @@ export const BookingWizard = () => {
         contact: submissionData?.contact,
         addressId: submissionData?.address?.id,
         first_time: submissionData?.quote_schedule?.first_time,
+        customerNotes:
+          submissionData?.additional_data?.customer_notes
+          || submissionData?.additional_data?.additional_notes
+          || '',
         quoted_by: typeof quotedByValue === 'number' ? quotedByValue : (typeof quotedByValue === 'string' && !isNaN(Number(quotedByValue)) ? Number(quotedByValue) : quotedByValue)
       },
       selectedServices: submissionData.service_selections.map((s) => ({
@@ -228,14 +236,16 @@ export const BookingWizard = () => {
   // }, [bookingData]);
 
   const [createSubmission, { isLoading: creating }] = useCreateSubmissionMutation()
+  const [startPublicSubmission, { isLoading: startingPublic }] = useStartPublicSubmissionMutation()
   const [updateSubmission, { isLoading: updating }] = useUpdateSubmissionMutation()
+  const [updateAdditionalData] = useUpdateAdditionalDataMutation()
   const [createQuote, { isLoading: creatingQuote }] = useCreateQuoteMutation()
   const [createQuestionResponses, { isLoading: submittingResponses }] = useCreateQuestionResponsesMutation()
   const [submitOnlyCustomProducts] = useSubmitOnlyCustomProductsMutation()
 
   const [addServiceToSubmission] = useCreateServiceToSubmissionMutation();
   
-  const isSavingContact = creating || updating
+  const isSavingContact = creating || updating || startingPublic
   const navigate = useNavigate()
 
   // Use useCallback to prevent infinite loops
@@ -369,6 +379,87 @@ export const BookingWizard = () => {
   const handleNext = async () => {
     if (activeStep === 0) {
       const {submission_id} = bookingData
+
+      if (isPublicMode) {
+        const info = bookingData.userInfo || {};
+        const required = [
+          info.firstName,
+          info.email,
+          info.phone,
+          info.streetAddress,
+          info.city,
+          info.state,
+          info.postalCode,
+          info.selectedHouseSize,
+        ];
+        if (required.some((v) => !v || String(v).trim() === '')) {
+          alert('Please fill in all required contact and address fields.');
+          return;
+        }
+        if (!ghlLocationId) {
+          alert('Missing location. Please open this page from a valid quote link.');
+          return;
+        }
+
+        try {
+          if (submission_id) {
+            await updateSubmission({
+              id: submission_id,
+              house_sqft: info.selectedHouseSize,
+              first_time: Boolean(info.first_time),
+            }).unwrap();
+            const notes = info.customerNotes || '';
+            setAdditionalNotes(notes);
+            await updateAdditionalData({
+              submissionId: submission_id,
+              payload: {
+                additional_data: {
+                  additional_notes: notes,
+                  customer_notes: notes,
+                },
+              },
+            }).unwrap();
+          } else {
+            const response = await startPublicSubmission({
+              first_name: info.firstName,
+              last_name: info.lastName || '',
+              email: info.email,
+              phone: info.phone,
+              street_address: info.streetAddress,
+              city: info.city,
+              state: info.state,
+              postal_code: info.postalCode,
+              gate_code: info.gateCode || '',
+              property_type: info.propertyType || 'residential',
+              house_sqft: Number(info.selectedHouseSize),
+              first_time: Boolean(info.first_time),
+              customer_notes: info.customerNotes || '',
+              location_id: ghlLocationId,
+            }).unwrap();
+
+            updateBookingData({
+              submission_id: response.submission_id,
+              userInfo: {
+                ...info,
+                contactId: response.contact_id,
+                addressId: response.address_id,
+              },
+              selectedCustomProducts: [],
+            });
+            setAdditionalNotes(info.customerNotes || '');
+          }
+          setActiveStep((prev) => prev + 1);
+        } catch (err) {
+          const detail =
+            err?.data?.error ||
+            err?.data?.detail ||
+            (typeof err?.data === 'string' ? err.data : null) ||
+            'Could not save your information. Please try again.';
+          alert(detail);
+        }
+        return;
+      }
+
       const { addressId, contactId } = bookingData.userInfo
       if ([addressId, contactId].some((v) => !v)) {
         return
@@ -580,14 +671,28 @@ export const BookingWizard = () => {
   const isStepComplete = (step) => {
     switch (step) {
       case 0: {
+      const info = bookingData.userInfo || {};
+      const isNonEmpty = (v) =>
+        v !== null && v !== undefined && String(v).trim() !== "";
+
+      if (isPublicMode) {
+        return (
+          isNonEmpty(info.firstName) &&
+          isNonEmpty(info.email) &&
+          isNonEmpty(info.phone) &&
+          isNonEmpty(info.streetAddress) &&
+          isNonEmpty(info.city) &&
+          isNonEmpty(info.state) &&
+          isNonEmpty(info.postalCode) &&
+          isNonEmpty(info.selectedHouseSize)
+        );
+      }
+
       const {
         contactId = "",
         addressId = "",
         selectedHouseSize = ""
-      } = bookingData.userInfo || {};
-
-      const isNonEmpty = (v) =>
-        v !== null && v !== undefined && String(v).trim() !== "";
+      } = info;
 
       return (
         isNonEmpty(contactId) &&
@@ -631,9 +736,11 @@ export const BookingWizard = () => {
   const getStepContent = (step) => {
     switch (step) {
       case 0:
-        return <UserInfoForm data={bookingData} onUpdate={updateBookingData} />;
+        return isPublicMode
+          ? <PublicCustomerInfoForm data={bookingData} onUpdate={updateBookingData} />
+          : <UserInfoForm data={bookingData} onUpdate={updateBookingData} />;
       case 1:
-        return <MultiServiceSelectionForm data={bookingData} onUpdate={updateBookingData} />;
+        return <MultiServiceSelectionForm data={bookingData} onUpdate={updateBookingData} isPublicMode={isPublicMode} />;
       case 2:
         return <QuestionsForm data={bookingData} onUpdate={updateBookingData} />;
       case 3:
@@ -649,6 +756,7 @@ export const BookingWizard = () => {
         return <CheckoutSummary data={bookingData} onUpdate={updateBookingData} termsAccepted={termsAccepted} setTermsAccepted={setTermsAccepted}
         additionalNotes={addiditional_notes} setAdditionalNotes={setAdditionalNotes} setActiveStep={setActiveStep} handleSignatureEnd={handleSignatureEnd} setSignature={setSignature} signatureTimestamp={signatureTimestamp}
         isStepComplete={isStepComplete} handleNext={handleNext} signature={signature} setBookingData={setBookingData} initialBookingData={initialBookingData}
+        isPublicMode={isPublicMode}
         />;
       default:
         return "Unknown step";
@@ -685,21 +793,53 @@ export const BookingWizard = () => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 relative">
-      <TenantModuleSwitcher />
+    <div
+      className={
+        isPublicMode
+          ? 'min-h-screen relative bg-[radial-gradient(ellipse_at_top,_#ecfdf5_0%,_#fafaf9_45%,_#f5f5f4_100%)]'
+          : 'min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-50 relative'
+      }
+    >
+      {!isPublicMode && <TenantModuleSwitcher />}
       {/* Header */}
-      <div className="bg-white border-b border-gray-200 shadow-sm">
+      <div
+        className={
+          isPublicMode
+            ? 'bg-white/90 backdrop-blur border-b border-stone-200/80 shadow-sm'
+            : 'bg-white border-b border-gray-200 shadow-sm'
+        }
+      >
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 flex items-center justify-between">
           <div className="text-center sm:text-left flex-1">
-            <h1 className="text-3xl font-bold text-gray-900 mb-2">Create Your Quote</h1>
-            <p className="text-gray-600">Complete the steps below to create your quote</p>
+            {isPublicMode && (
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-teal-700 mb-1.5">
+                Customer estimate
+              </p>
+            )}
+            <h1
+              className={
+                isPublicMode
+                  ? 'text-3xl sm:text-4xl font-bold text-teal-950 mb-2 tracking-tight'
+                  : 'text-3xl font-bold text-gray-900 mb-2'
+              }
+            >
+              {isPublicMode ? 'Get Your Free Estimate' : 'Create Your Quote'}
+            </h1>
+            <p className={isPublicMode ? 'text-stone-600 max-w-xl' : 'text-gray-600'}>
+              {isPublicMode
+                ? 'A few quick steps — your info, services, and questions — and we will build your estimate.'
+                : 'Complete the steps below to create your quote'}
+            </p>
           </div>
 
-          {/* Switch to Admin button */}
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              className="border-blue-600 text-blue-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg text-sm px-3 py-2"
+              className={
+                isPublicMode
+                  ? 'border-teal-700 text-teal-800 hover:text-teal-900 hover:bg-teal-50 rounded-xl text-sm px-3 py-2'
+                  : 'border-blue-600 text-blue-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg text-sm px-3 py-2'
+              }
               onClick={() => {
                 localStorage.removeItem("bookingData");
                 setBookingData(initialBookingData);
@@ -710,50 +850,70 @@ export const BookingWizard = () => {
               <span className="hidden sm:inline">Start a new quote</span>
             </Button>
 
-            <Button
-              variant="outline"
-              className="border-blue-600 text-blue-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg text-sm px-3 py-2"
-              onClick={() => navigate(`/admin/services?email=${paramEmail}`)}
-            >
-              <AdminPanelSettings className="w-5 h-5 mr-1" />
-              <span className="hidden sm:inline">Switch to Admin</span>
-            </Button>
+            {!isPublicMode && (
+              <Button
+                variant="outline"
+                className="border-blue-600 text-blue-600 hover:text-blue-600 hover:bg-blue-50 rounded-lg text-sm px-3 py-2"
+                onClick={() => navigate(`/admin/services?email=${paramEmail}`)}
+              >
+                <AdminPanelSettings className="w-5 h-5 mr-1" />
+                <span className="hidden sm:inline">Switch to Admin</span>
+              </Button>
+            )}
           </div>
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-8">
+      <div className={`max-w-7xl mx-auto px-2 sm:px-6 lg:px-8 py-8 ${isPublicMode ? 'max-w-5xl' : ''}`}>
         {/* Progress Section */}
-        <Card className="mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm">
+        <Card
+          className={
+            isPublicMode
+              ? 'mb-8 shadow-md border border-stone-200/80 bg-white/95 rounded-2xl'
+              : 'mb-8 shadow-lg border-0 bg-white/80 backdrop-blur-sm'
+          }
+        >
           <CardContent className="p-6">
             <div className="mb-6">
               <div className="flex justify-between items-center mb-2">
-                <span className="text-sm font-medium text-gray-700">
+                <span className={`text-sm font-medium ${isPublicMode ? 'text-stone-600' : 'text-gray-700'}`}>
                   Step {activeStep + 1} of {steps.length}
                 </span>
-                <span className="text-sm font-medium text-gray-700">{Math.round(progressPercentage)}% Complete</span>
+                <span className={`text-sm font-medium ${isPublicMode ? 'text-teal-800' : 'text-gray-700'}`}>
+                  {Math.round(progressPercentage)}% Complete
+                </span>
               </div>
-              <Progress value={progressPercentage} className="h-2" />
+              <Progress
+                value={progressPercentage}
+                className={`h-2 ${isPublicMode ? '[&>div]:bg-teal-600 bg-stone-100' : ''}`}
+              />
             </div>
 
-            {/* Step Indicators */}
             <div className="flex justify-between items-center">
               {steps.map((label, index) => (
                 <div key={label} className="flex flex-col items-center space-y-2">
                   <div
                     className={`flex items-center justify-center w-10 h-10 rounded-full border-2 transition-all duration-200 ${
-                      index < activeStep
-                        ? "bg-gray-500 border-gray-500 text-white"
-                        : index === activeStep
-                          ? "bg-gray-500 border-gray-500 text-white"
-                          : "bg-gray-100 border-gray-300 text-gray-400"
+                      isPublicMode
+                        ? index < activeStep
+                          ? 'bg-teal-600 border-teal-600 text-white'
+                          : index === activeStep
+                            ? 'bg-teal-700 border-teal-700 text-white shadow-md shadow-teal-700/25'
+                            : 'bg-stone-50 border-stone-300 text-stone-400'
+                        : index < activeStep
+                          ? 'bg-gray-500 border-gray-500 text-white'
+                          : index === activeStep
+                            ? 'bg-gray-500 border-gray-500 text-white'
+                            : 'bg-gray-100 border-gray-300 text-gray-400'
                     }`}
                   >
                     {index < activeStep || activeStep === steps.length - 1 ? <CheckCircle className="h-5 w-5" /> : <Circle className="h-5 w-5" />}
                   </div>
                   <span
                     className={`text-xs font-medium text-center max-w-20 ${
-                      index <= activeStep ? "text-gray-900" : "text-gray-500"
+                      index <= activeStep
+                        ? isPublicMode ? 'text-teal-950' : 'text-gray-900'
+                        : isPublicMode ? 'text-stone-400' : 'text-gray-500'
                     }`}
                   >
                     {label}
@@ -765,17 +925,22 @@ export const BookingWizard = () => {
         </Card>
 
         {/* Main Content */}
-        <Card className="shadow-xl border-0 bg-white/90 backdrop-blur-sm">
+        <Card
+          className={
+            isPublicMode
+              ? 'shadow-lg border border-stone-200/80 bg-white rounded-2xl'
+              : 'shadow-xl border-0 bg-white/90 backdrop-blur-sm'
+          }
+        >
           <CardContent sx={{ p: { xs: '0.4rem', sm: '1.5rem', md: '2rem' } }}>
             <div className="min-h-[500px]">{getStepContent(activeStep)}</div>
 
-            {/* Navigation Buttons */}
-            <div className="grid grid-cols-3 items-center pt-8 mt-8 border-t border-gray-200">
+            <div className={`grid grid-cols-3 items-center pt-8 mt-8 border-t ${isPublicMode ? 'border-stone-200' : 'border-gray-200'}`}>
               <Button
                 variant="outline"
                 onClick={handleBack}
                 disabled={activeStep === 0}
-                className="px-6 bg-transparent justify-self-start"
+                className={`px-6 bg-transparent justify-self-start ${isPublicMode ? 'rounded-xl border-stone-300 text-stone-700' : ''}`}
               >
                 Back
               </Button>
@@ -789,7 +954,11 @@ export const BookingWizard = () => {
                   <Button
                     onClick={handleNext}
                     disabled={!isStepComplete(activeStep) || isSavingContact || submittingResponses || creatingQuote || submittingQuote}
-                    className="px-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800"
+                    className={
+                      isPublicMode
+                        ? 'px-6 rounded-xl bg-teal-700 hover:bg-teal-800 text-white shadow-md shadow-teal-700/20'
+                        : 'px-6 bg-gradient-to-r from-blue-600 to-blue-700 hover:from-blue-700 hover:to-blue-800'
+                    }
                   >
                     {(isSavingContact || submittingResponses || creatingQuote) ? (
                       <>

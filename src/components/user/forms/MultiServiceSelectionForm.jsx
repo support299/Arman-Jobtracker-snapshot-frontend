@@ -15,7 +15,7 @@ import { getServiceIcon } from "../../../utils/serviceIcons";
 import { useSearchParams } from 'react-router-dom';
 
 
-const MultiServiceSelectionForm = ({ data, onUpdate }) => {
+const MultiServiceSelectionForm = ({ data, onUpdate, isPublicMode = false }) => {
 
   const [searchParams] = useSearchParams();
 
@@ -43,13 +43,17 @@ const MultiServiceSelectionForm = ({ data, onUpdate }) => {
   });
 
   useEffect(()=>{
+    if (isPublicMode) {
+      onUpdate({ selectedCustomProducts: [] });
+      return;
+    }
     if (servicesData?.custom_services){
       setCustomProducts(servicesData?.custom_services)
     }
     onUpdate({
-      selectedCustomProducts: servicesData?.custom_services.filter((p) => p.is_active),
+      selectedCustomProducts: servicesData?.custom_services?.filter((p) => p.is_active) || [],
     });
-  },[servicesData])
+  },[servicesData, isPublicMode])
 
   useEffect(() => {
     if (services) {
@@ -151,8 +155,8 @@ const MultiServiceSelectionForm = ({ data, onUpdate }) => {
         })}
       </div>
 
-      {/* Custom Products list (from API) */}
-      {customProducts.length > 0 && (
+      {/* Custom Products list (from API) — technician only */}
+      {!isPublicMode && customProducts.length > 0 && (
         <div className="mb-6">
           <h3 className="text-xl font-semibold mb-4">Custom Services</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -188,7 +192,8 @@ const MultiServiceSelectionForm = ({ data, onUpdate }) => {
         </div>
       )}
 
-      {/* Add custom product button */}
+      {/* Add custom product button — technician only */}
+      {!isPublicMode && (
       <button
         onClick={() => setDialogOpen(true)}
         className="w-full p-4 text-left border border-gray-200 rounded-lg hover:border-blue-500 hover:bg-blue-50 transition-all duration-200"
@@ -209,9 +214,11 @@ const MultiServiceSelectionForm = ({ data, onUpdate }) => {
           </div>
         </div>
       </button>
+      )}
       {/* <Button onClick={() => setDialogOpen(true)}>Add Custom Product</Button> */}
 
       {/* Dialog for adding custom product */}
+      {!isPublicMode && (
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -249,6 +256,7 @@ const MultiServiceSelectionForm = ({ data, onUpdate }) => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      )}
     </div>
   );
 };

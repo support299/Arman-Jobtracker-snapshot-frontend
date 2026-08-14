@@ -21,7 +21,16 @@ export const quoteApi = createApi({
         data: contactData,
       }),
       invalidatesTags: ['Submission'],
-    }), 
+    }),
+    /** Public customer entry: upsert GHL contact + start submission (no contact search). */
+    startPublicSubmission: builder.mutation({
+      query: (payload) => ({
+        url: 'public/start-submission/',
+        method: 'POST',
+        data: payload,
+      }),
+      invalidatesTags: ['Submission'],
+    }),
     updateSubmission: builder.mutation({
       query: ({ id, ...contactData }) => ({
         url: `${id}/`,
@@ -249,7 +258,7 @@ export const quoteApi = createApi({
   }),
 });
 
-export const { useGetInitialDataQuery, useGetServiceQuestionsQuery, useCreateSubmissionMutation, useUpdateSubmissionMutation, useCreateQuestionResponsesMutation,
+export const { useGetInitialDataQuery, useGetServiceQuestionsQuery, useCreateSubmissionMutation, useStartPublicSubmissionMutation, useUpdateSubmissionMutation, useCreateQuestionResponsesMutation,
   useCreateServiceToSubmissionMutation,   useGetQuoteDetailsQuery,useSubmitQuoteMutation, useGetAddressesByContactQuery, useCreateAddressForContactMutation, useSearchContactsQuery, useCreateCustomProductMutation,
   useUpdateCustomProductMutation, useDeleteCustomProductMutation, useGetServicesQuery, useCreateScheduleMutation, useDeleteServiceMutation, useGetGlobalPriceQuery,
   useGetCalendarFreeSlotsQuery, useSubmitOnlyCustomProductsMutation, useRejectQuoteMutation, useUpdateAdditionalDataMutation, usePersistQuoteSnapshotMutation, useGetAccountInfoQuery, useUploadSubmissionImageMutation, useGetSubmissionImagesQuery,

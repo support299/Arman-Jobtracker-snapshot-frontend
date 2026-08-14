@@ -135,7 +135,8 @@ const QuoteDetailsPage = () => {
       id: quote.id,
       scheduled_date: slotWallClockAsUtcIso(slotDate),
       is_submitted: true,
-      quoted_by: quote.quote_schedule?.quoted_by,
+      // Public quotes have no technician; blank quoted_by is allowed.
+      quoted_by: quote.quote_schedule?.quoted_by || '',
     }
 
     setIsScheduling(true)
@@ -205,6 +206,7 @@ const QuoteDetailsPage = () => {
     quote_schedule,
     quoted_by_details,
     images,
+    quote_origin,
   } = quote
 
   const renderQuestionResponse = (response) => {
@@ -773,6 +775,23 @@ const QuoteDetailsPage = () => {
                 <Typography variant="body2" color="text.secondary" sx={{fontSize:{ xs: "0.6rem", sm: "0.8rem", md: "0.9rem"}}}>
                   ID: {quote.id}
                 </Typography>
+                {(quote_origin || additional_data?.quote_origin) && (
+                  <Chip
+                    size="small"
+                    label={
+                      (quote_origin || additional_data?.quote_origin) === 'public'
+                        ? 'Public quote'
+                        : 'Technician quote'
+                    }
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: { xs: '0.65rem', sm: '0.75rem' },
+                      borderRadius: 1,
+                      bgcolor: (quote_origin || additional_data?.quote_origin) === 'public' ? '#E8F4FD' : '#F3F4F6',
+                      color: (quote_origin || additional_data?.quote_origin) === 'public' ? '#0369A1' : '#374151',
+                    }}
+                  />
+                )}
                 {/* <Chip
                   label={status?.charAt(0).toUpperCase() + status?.slice(1)}
                   size="small"

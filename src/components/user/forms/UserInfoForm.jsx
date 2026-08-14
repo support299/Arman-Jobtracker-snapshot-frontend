@@ -329,7 +329,7 @@
             useSearchHook={useSearchContactsQuery}
             onSelect={handleContactSelect}
             location_id={location_id}
-            email={emailParam}
+            emailParam={emailParam}
             value={data.userInfo?.contact?.first_name + data?.userInfo?.contact?.last_name}
           />
 
