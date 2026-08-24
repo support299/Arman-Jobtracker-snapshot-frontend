@@ -1481,11 +1481,18 @@ export const AdminDashboard = () => {
                     </Box>
                     <Box>
                       <Typography variant="caption" color="text.secondary" display="block">
-                        Closed Revenue
+                        Closed Revenue (net)
                       </Typography>
                       <Typography variant="h6" fontWeight="600" color="success.main">
                         {formatCurrency(leadFunnelData.summary_metrics.total_revenue_closed_jobs)}
                       </Typography>
+                      {leadFunnelData.summary_metrics.gross_revenue_closed_jobs != null &&
+                        leadFunnelData.summary_metrics.gross_revenue_closed_jobs !==
+                          leadFunnelData.summary_metrics.total_revenue_closed_jobs && (
+                        <Typography variant="caption" color="text.secondary" display="block">
+                          Gross {formatCurrency(leadFunnelData.summary_metrics.gross_revenue_closed_jobs)}
+                        </Typography>
+                      )}
                     </Box>
                   </Box>
 
@@ -1967,6 +1974,17 @@ export const AdminDashboard = () => {
                           <Typography variant="body2" color="success.dark" fontWeight="700" display="block">
                             {formatCurrency(leadFunnelData.lead_funnel.closed_jobs.total_value)}
                           </Typography>
+                          {leadFunnelData.lead_funnel.closed_jobs.gross_value != null &&
+                            leadFunnelData.lead_funnel.closed_jobs.gross_value !==
+                              leadFunnelData.lead_funnel.closed_jobs.total_value && (
+                            <Typography variant="caption" color="text.secondary" display="block">
+                              Gross {formatCurrency(leadFunnelData.lead_funnel.closed_jobs.gross_value)}
+                              {(leadFunnelData.lead_funnel.closed_jobs.referral_credit_applied || 0) > 0 &&
+                                ` · Referral credit −${formatCurrency(leadFunnelData.lead_funnel.closed_jobs.referral_credit_applied)}`}
+                              {(leadFunnelData.lead_funnel.closed_jobs.referral_discount_applied || 0) > 0 &&
+                                ` · Referral discount −${formatCurrency(leadFunnelData.lead_funnel.closed_jobs.referral_discount_applied)}`}
+                            </Typography>
+                          )}
                         </Box>
                       </Box>
                     </Box>
@@ -1974,6 +1992,126 @@ export const AdminDashboard = () => {
                 </>
               ) : (
                 <Alert severity="info">No lead funnel data available</Alert>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Referral Bonus & Wallet */}
+          <Card sx={{ mb: 3, boxShadow: 1 }}>
+            <CardContent sx={{ p: { xs: 2, sm: 3 } }}>
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="subtitle1" fontWeight="600">
+                  Referral Bonus & Wallet
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  Same dashboard period as lead funnel · closed totals are net of credits applied at invoice time
+                </Typography>
+              </Box>
+
+              {leadFunnelLoading ? (
+                <Skeleton variant="rectangular" height={120} />
+              ) : leadFunnelData?.referral_bonus ? (
+                <Box
+                  sx={{
+                    display: 'grid',
+                    gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)', md: 'repeat(3, 1fr)', lg: 'repeat(4, 1fr)' },
+                    gap: 2,
+                  }}
+                >
+                  <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Wallet credit applied (completed)
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700} color="error.main">
+                      −{formatCurrency(leadFunnelData.referral_bonus.wallet_credit_applied)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Deducted from closed revenue
+                    </Typography>
+                  </Box>
+                  <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Friend discount applied (completed)
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700} color="error.main">
+                      −{formatCurrency(leadFunnelData.referral_bonus.friend_discount_applied)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      First-job referral discount
+                    </Typography>
+                  </Box>
+                  <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Pending wallet balance
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700} color="warning.main">
+                      {formatCurrency((leadFunnelData.referral_bonus.pending_wallet_balance_cents || 0) / 100)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Still available to apply
+                    </Typography>
+                  </Box>
+                  <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Pending referrals
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700}>
+                      {leadFunnelData.referral_bonus.pending_referrals_count}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Expected friend discount{' '}
+                      {formatCurrency((leadFunnelData.referral_bonus.pending_friend_discount_cents || 0) / 100)}
+                    </Typography>
+                  </Box>
+                  <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Credits issued (period)
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700} color="success.main">
+                      {formatCurrency((leadFunnelData.referral_bonus.credits_issued_cents || 0) / 100)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Referrer rewards credited
+                    </Typography>
+                  </Box>
+                  <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Credits applied (period)
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700}>
+                      {formatCurrency((leadFunnelData.referral_bonus.credits_applied_cents || 0) / 100)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Wallet debits on invoices
+                    </Typography>
+                  </Box>
+                  <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Closed revenue gross → net
+                    </Typography>
+                    <Typography variant="body1" fontWeight={700}>
+                      {formatCurrency(leadFunnelData.referral_bonus.gross_closed_revenue)}
+                      {' → '}
+                      {formatCurrency(leadFunnelData.referral_bonus.net_closed_revenue)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      After all discounts & referral credits
+                    </Typography>
+                  </Box>
+                  <Box sx={{ p: 1.5, border: '1px solid', borderColor: 'divider', borderRadius: 2 }}>
+                    <Typography variant="caption" color="text.secondary" display="block">
+                      Friend discount pending on jobs
+                    </Typography>
+                    <Typography variant="h6" fontWeight={700} color="warning.main">
+                      {formatCurrency(leadFunnelData.referral_bonus.friend_discount_pending_on_jobs)}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      On open jobs in this period
+                    </Typography>
+                  </Box>
+                </Box>
+              ) : (
+                <Alert severity="info">No referral bonus data for this period</Alert>
               )}
             </CardContent>
           </Card>
