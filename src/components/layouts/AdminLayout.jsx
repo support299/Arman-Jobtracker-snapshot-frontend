@@ -53,6 +53,7 @@ import {
   Dashboard as DashboardIcon,
   AccountCircle,
   Contacts as ContactsIcon,
+  CardGiftcard,
 } from "@mui/icons-material"
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
@@ -161,6 +162,7 @@ const getManagementItemsByRole = (role, fullAccessRoles) => {
     { text: "Service Management", path: "/admin/services", icon: BusinessCenter },
     { text: "Location Management", path: "/admin/locations", icon: LocationOn },
     { text: "Account Settings", path: "/admin/account-settings", icon: Settings },
+    { text: "Referrals", path: "/admin/referrals", icon: CardGiftcard },
     { text: "Platform Portal", path: "/platform/dashboard", icon: AccountTree },
     // { text: "House Size Info", path: "/admin/house-size-info", icon: Home },
   ]

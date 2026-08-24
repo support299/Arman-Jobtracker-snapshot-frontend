@@ -43,4 +43,10 @@ export const TENANT_OPEN_DESTINATIONS = [
     description: "Logo, timezone, invoice URLs",
     path: "/admin/account-settings",
   },
+  {
+    key: "referrals",
+    label: "Referrals",
+    description: "Customer referral program",
+    path: "/admin/referrals",
+  },
 ]

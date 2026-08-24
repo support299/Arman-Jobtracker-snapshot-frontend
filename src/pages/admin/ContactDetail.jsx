@@ -26,10 +26,11 @@ import EventOutlined from '@mui/icons-material/EventOutlined';
 import PaidOutlined from '@mui/icons-material/PaidOutlined';
 import AccountBalanceOutlined from '@mui/icons-material/AccountBalanceOutlined';
 import ListAltOutlined from '@mui/icons-material/ListAltOutlined';
-import { ArrowBack, OpenInNew } from '@mui/icons-material';
+import { ArrowBack, ContentCopy, OpenInNew, CardGiftcard } from '@mui/icons-material';
 import TableChart from '@mui/icons-material/TableChart';
 import moment from 'moment-timezone';
 import { useGetDashboardContactByIdQuery } from '../../store/api/dashboardApi';
+import { useEnsureReferralLinkMutation } from '../../store/api/referralsApi';
 import { ContactActivitySplit } from '../../components/admin/contacts/ContactActivitySplit';
 import { ContactJobJobCard } from '../../components/admin/contacts/ContactJobJobCard';
 import {
@@ -116,6 +117,10 @@ const ContactDetail = () => {
   const [createAddress, { isLoading: creatingAddr }] = useCreateContactAddressMutation();
   const [updateAddress, { isLoading: updatingAddr }] = useUpdateContactAddressMutation();
   const [deleteAddress, { isLoading: deletingAddr }] = useDeleteContactAddressMutation();
+  const [ensureReferralLink, { isLoading: ensuringReferral }] = useEnsureReferralLinkMutation();
+  const [referralLocal, setReferralLocal] = useState(null);
+  const [referralMsg, setReferralMsg] = useState(null);
+  const [copiedReferral, setCopiedReferral] = useState(false);
 
   const { data, isLoading, error, refetch } = useGetDashboardContactByIdQuery(contactKey, { skip: contactKey == null });
 
@@ -126,7 +131,43 @@ const ContactDetail = () => {
     setSelInvoice(null);
     setSelAppt(null);
     setSelAddr(null);
-  }, [tab]);
+    setReferralLocal(null);
+    setReferralMsg(null);
+  }, [tab, contactKey]);
+
+  const referral = referralLocal || data?.referral || null;
+
+  const moneyCents = (cents) => money((Number(cents) || 0) / 100);
+
+  const handleEnsureReferralLink = async () => {
+    if (!data?.id) return;
+    setReferralMsg(null);
+    try {
+      const result = await ensureReferralLink(data.id).unwrap();
+      setReferralLocal({
+        eligible: true,
+        has_link: true,
+        referral_code: result.referral_code,
+        share_url: result.share_url,
+        hub_url: result.hub_url,
+        available_credit_cents: result.available_credit_cents ?? referral?.available_credit_cents ?? 0,
+        lifetime_credit_cents: referral?.lifetime_credit_cents ?? 0,
+        program_enabled: true,
+      });
+      setReferralMsg({ type: 'success', text: 'Referral link ready.' });
+      refetch();
+    } catch (err) {
+      setReferralMsg({ type: 'error', text: err?.data?.detail || 'Could not create referral link.' });
+    }
+  };
+
+  const handleCopyReferral = async () => {
+    const url = referral?.share_url;
+    if (!url) return;
+    await navigator.clipboard.writeText(url);
+    setCopiedReferral(true);
+    window.setTimeout(() => setCopiedReferral(false), 1600);
+  };
 
   const displayName = useMemo(() => {
     if (!data) return 'Contact';
@@ -477,6 +518,86 @@ const ContactDetail = () => {
               <Typography sx={{ ...contactsPageSx.subtitle, maxWidth: 'none' }}>
                 Identifiers and sync metadata. Invoice lists may show up to 250 recent rows; summary totals include the full set.
               </Typography>
+
+              {isAdminRoute && referral?.eligible !== false && (
+                <Paper
+                  variant="outlined"
+                  sx={{
+                    p: 2,
+                    borderRadius: 2,
+                    bgcolor: (t) => alpha(t.palette.primary.main, t.palette.mode === 'dark' ? 0.08 : 0.04),
+                  }}
+                >
+                  <Stack spacing={1.5}>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <CardGiftcard color="primary" fontSize="small" />
+                      <Typography fontWeight={700}>Customer referral</Typography>
+                      {referral?.program_enabled === false && (
+                        <Chip size="small" label="Program paused" color="warning" variant="outlined" />
+                      )}
+                    </Stack>
+                    <Typography variant="body2" color="text.secondary">
+                      Any contact can get a personal referral link — no completed job required. Credits still unlock only after a referred friend’s first qualifying invoice is paid.
+                    </Typography>
+                    {referral?.has_link && referral?.share_url ? (
+                      <>
+                        <Typography variant="caption" color="text.secondary">
+                          Code: <Box component="span" sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{referral.referral_code}</Box>
+                          {' · '}Available credit: {moneyCents(referral.available_credit_cents)}
+                        </Typography>
+                        <Stack direction={{ xs: 'column', sm: 'row' }} spacing={1}>
+                          <Box
+                            sx={{
+                              flex: 1,
+                              px: 1.5,
+                              py: 1,
+                              borderRadius: 1.5,
+                              border: 1,
+                              borderColor: 'divider',
+                              bgcolor: 'background.paper',
+                              fontSize: '0.8125rem',
+                              fontFamily: 'monospace',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {String(referral.share_url).replace(/^https?:\/\//, '')}
+                          </Box>
+                          <Button
+                            variant="contained"
+                            disableElevation
+                            startIcon={<ContentCopy />}
+                            onClick={handleCopyReferral}
+                            sx={{ textTransform: 'none', fontWeight: 600 }}
+                          >
+                            {copiedReferral ? 'Copied' : 'Copy link'}
+                          </Button>
+                        </Stack>
+                      </>
+                    ) : (
+                      <Box>
+                        <Button
+                          variant="contained"
+                          disableElevation
+                          startIcon={<CardGiftcard />}
+                          onClick={handleEnsureReferralLink}
+                          disabled={ensuringReferral || referral?.program_enabled === false}
+                          sx={{ textTransform: 'none', fontWeight: 600 }}
+                        >
+                          {ensuringReferral ? 'Creating…' : 'Get referral link'}
+                        </Button>
+                      </Box>
+                    )}
+                    {referralMsg && (
+                      <Alert severity={referralMsg.type} onClose={() => setReferralMsg(null)}>
+                        {referralMsg.text}
+                      </Alert>
+                    )}
+                  </Stack>
+                </Paper>
+              )}
+
               <Box
                 sx={{
                   display: 'grid',

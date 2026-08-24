@@ -17,6 +17,7 @@ import AdminDashboard from './pages/admin/AdminDashboard.jsx';
 import ServicesManagement from './pages/admin/ServicesManagement.jsx';
 import LocationsManagement from './pages/admin/LocationsManagement.jsx';
 import AccountSettings from './pages/admin/AccountSettings.jsx';
+import ReferralOwnerDashboard from './pages/admin/ReferralOwnerDashboard.jsx';
 import LocationOAuthCallback from './pages/admin/LocationOAuthCallback.jsx';
 import { BookingWizard } from './components/user/BookingWizard.jsx';
 import UserLogin from './pages/admin/userLogin.jsx';
@@ -24,6 +25,8 @@ import AdminProtectedRoute from './pages/AdminProtectedRoute.jsx';
 import QuoteDetailsPage from './pages/user/QuoteDetailsPage.jsx';
 import OriginalProposalPage from './pages/user/OriginalProposalPage.jsx';
 import InvoicePaymentPage from './pages/user/InvoicePaymentPage.jsx';
+import ReferralClaimPage from './pages/user/ReferralClaimPage.jsx';
+import ReferralCustomerHubPage from './pages/user/ReferralCustomerHubPage.jsx';
 import HouseSizeInfo from './components/admin/HouseSizeInfo.jsx';
 import PlatformProtectedRoute from './platform/PlatformProtectedRoute.jsx';
 import PlatformLayout from './platform/PlatformLayout.jsx';
@@ -129,6 +132,8 @@ function App() {
                   <Route path="/quote/details/:id" element={<QuoteDetailsPage />} />
                   <Route path="/quote/original/:id" element={<OriginalProposalPage />} />
                   <Route path="/invoice/:jobId" element={<InvoicePaymentPage />} />
+                  <Route path="/r/:code" element={<ReferralClaimPage />} />
+                  <Route path="/refer" element={<ReferralCustomerHubPage />} />
                   <Route path="/portal/contacts/:id" element={<ContactDetail />} />
                   <Route path="/contact/jobs/:ghl_contact_id" element={<ContactProfilePage />} />
                   <Route path="/contact/profile/:ghl_contact_id" element={<ContactProfilePage />} />
@@ -241,6 +246,12 @@ function App() {
                     <Route path="account-settings" element={
                         <RoleProtectedRoute allowedRoles={['manager', 'supervisor']}>
                           <AccountSettings />
+                        </RoleProtectedRoute>
+                      }
+                    />
+                    <Route path="referrals" element={
+                        <RoleProtectedRoute allowedRoles={['manager', 'supervisor', 'admin', 'agency']}>
+                          <ReferralOwnerDashboard />
                         </RoleProtectedRoute>
                       }
                     />

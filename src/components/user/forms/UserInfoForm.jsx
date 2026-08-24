@@ -14,6 +14,7 @@
     Checkbox,
     Button,
     Stack,
+    Alert,
   } from '@mui/material';
   import { Add, LocationOn } from '@mui/icons-material';
   import axios from 'axios';
@@ -24,8 +25,10 @@
     useSearchContactsQuery,
     useCreateAddressForContactMutation,
   } from '../../../store/api/user/quoteApi';
+  import { useGetContactReferralCreditQuery } from '../../../store/api/referralsApi';
   import SearchableSelect from '../SearchableSelect';
   import { ContactAddressFormDialog } from '../../contacts/ContactAddressFormDialog';
+  import { useMoneyFormatter } from '../../../hooks/useMoneyFormatter';
 
   // PlacesAutocomplete in plain JSX
   const PlacesAutocomplete = ({ value, onSelect, error, helperText }) => {
@@ -199,6 +202,7 @@
     const [searchParams] = useSearchParams();
     const emailParam = searchParams.get("email");
     const hasSetQuotedByRef = useRef(false);
+    const { formatMoney } = useMoneyFormatter();
 
     const location_id = searchParams.get('location_id');
 
@@ -208,6 +212,15 @@
     const { data: addresses, isFetching: isFetchingAddresses } =
       useGetAddressesByContactQuery(contactId, { skip: !contactId });
     const [createAddress, { isLoading: isCreatingAddress }] = useCreateAddressForContactMutation();
+
+    const { data: referralCredit } = useGetContactReferralCreditQuery(contactId, {
+      skip: !contactId,
+    });
+    const availableReferralDollars = Number(referralCredit?.available_credit_dollars || 0);
+    const showReferralCredit =
+      Boolean(contactId) &&
+      Boolean(referralCredit?.program_enabled) &&
+      availableReferralDollars > 0;
 
     const addressList = Array.isArray(addresses)
       ? addresses
@@ -332,6 +345,13 @@
             emailParam={emailParam}
             value={data.userInfo?.contact?.first_name + data?.userInfo?.contact?.last_name}
           />
+
+          {showReferralCredit && (
+            <Alert severity="success">
+              This customer has {formatMoney(availableReferralDollars)} referral credit available.
+              It will auto-apply as a discount when a future job invoice is created.
+            </Alert>
+          )}
 
           {contactId && (
             <Box>

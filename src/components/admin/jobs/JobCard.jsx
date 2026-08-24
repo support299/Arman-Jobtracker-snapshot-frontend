@@ -5,6 +5,7 @@ import { useDispatch } from "react-redux"
 import moment from "moment-timezone"
 import { useUpdateJobMutation, useGetJobDetailsQuery, jobsApi } from "../../../store/api/jobsApi"
 import { useRescheduleQuoteFromJobMutation } from "../../../store/api/user/quoteApi"
+import { useGetContactReferralCreditQuery } from "../../../store/api/referralsApi"
 import { slotWallClockAsUtcIso } from "../../../utils/scheduleIso"
 import QuoteCalendarScheduler from "../../user/QuoteCalendarScheduler"
 import { jobSurchargeAmount, overlayJobDetail } from "../../../utils/jobPricing"
@@ -26,6 +27,9 @@ import {
   DialogContent,
   DialogActions,
   TextField,
+  Alert,
+  Switch,
+  FormControlLabel,
 } from "@mui/material"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Button } from "@/components/ui/button"
@@ -106,6 +110,16 @@ export function JobCard({
 
   const jobId = job?.job_id || job?.id
   const { data: jobDetailsData } = useGetJobDetailsQuery(jobId, { skip: !jobId || skipJobDetailsQuery })
+  const referralContactId = job?.contact_details?.id || job?.contact || null
+  const { data: referralCredit } = useGetContactReferralCreditQuery(referralContactId, {
+    skip: !referralContactId || readOnly,
+  })
+  const availableReferralDollars = Number(referralCredit?.available_credit_dollars || 0)
+  const showReferralCredit =
+    Boolean(referralContactId) &&
+    !readOnly &&
+    Boolean(referralCredit?.program_enabled) &&
+    availableReferralDollars > 0
   const accountTimezone = useAccountTimezone(
     accountTimezoneProp ?? jobDetailsData?.account_timezone ?? job?.account_timezone,
   )
@@ -335,10 +349,51 @@ export function JobCard({
         ? (servicesTotal * numDiscountValue) / 100
         : 0
   const surchargeAmount = jobSurchargeAmount(pricingJob)
-  const discountedBase = Math.max(0, servicesTotal - discountAmount)
+
+  // Referral: friend discount on the referred customer's first job + wallet credit
+  const referralInfo = jobDetailsData?.referral_info ?? job?.referral_info ?? null
+  const applyReferralDiscount =
+    jobDetailsData?.apply_referral_discount ?? job?.apply_referral_discount ?? true
+  const referralDiscountRaw = parseFloat(
+    jobDetailsData?.referral_discount_amount ?? job?.referral_discount_amount ?? 0
+  ) || 0
+  const referralDiscountAmount = applyReferralDiscount ? referralDiscountRaw : 0
+  const referralCreditApplied = parseFloat(
+    jobDetailsData?.referral_credit_amount ?? job?.referral_credit_amount ?? 0
+  ) || 0
+
+  const discountedBase = Math.max(
+    0,
+    servicesTotal - discountAmount - referralDiscountAmount - referralCreditApplied
+  )
   const finalTotal = discountedBase + surchargeAmount
   const showSubtotalBeforeAdjustments =
-    discountAmount > 0 || surchargeAmount > 0
+    discountAmount > 0 || surchargeAmount > 0 || referralDiscountAmount > 0 || referralCreditApplied > 0
+
+  const [referralToggleSaving, setReferralToggleSaving] = useState(false)
+  const handleToggleReferralDiscount = async (enabled) => {
+    const targetJobId = job?.job_id || job?.id
+    if (!targetJobId) return
+    setReferralToggleSaving(true)
+    try {
+      const result = await updateJob({ id: targetJobId, apply_referral_discount: enabled }).unwrap()
+      if (onUpdate) onUpdate(result)
+      toast({
+        title: enabled ? "Referral discount enabled" : "Referral discount disabled",
+        description: enabled
+          ? "The referral discount will be applied to this job."
+          : "The referral discount was removed and totals recalculated.",
+      })
+    } catch (err) {
+      toast({
+        title: "Error",
+        description: "Failed to update the referral discount. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setReferralToggleSaving(false)
+    }
+  }
 
   const handleApplyDiscount = async () => {
     const jobId = job?.job_id || job?.id
@@ -952,6 +1007,41 @@ export function JobCard({
                 <Typography variant="caption" sx={{ color: 'text.secondary', fontWeight: 600, textTransform: 'uppercase', mb: 1, display: 'block', fontSize: '0.7rem', letterSpacing: '0.5px' }}>
                   Discount
                 </Typography>
+                {showReferralCredit && (
+                  <Alert severity="info" sx={{ mb: 1, py: 0 }}>
+                    Referral wallet credit available: {formatPrice(availableReferralDollars)}. It is applied
+                    automatically when the invoice is created — do not add it as a manual discount.
+                  </Alert>
+                )}
+                {referralInfo && (
+                  <Box sx={{ mb: 1 }}>
+                    <Alert severity={applyReferralDiscount ? "success" : "warning"} sx={{ py: 0 }}>
+                      Referral job — referred by {referralInfo.referrer_name}
+                      {referralDiscountRaw > 0 && ` · Referral discount ${formatPrice(referralDiscountRaw)}`}
+                      {referralInfo.discount_disabled && referralInfo.discount_disabled_by
+                        ? ` · disabled by ${referralInfo.discount_disabled_by}`
+                        : ""}
+                    </Alert>
+                    {referralDiscountRaw > 0 && (
+                      <FormControlLabel
+                        sx={{ mt: 0.5 }}
+                        control={
+                          <Switch
+                            size="small"
+                            checked={Boolean(applyReferralDiscount)}
+                            disabled={referralToggleSaving || job?.status === "completed"}
+                            onChange={(e) => handleToggleReferralDiscount(e.target.checked)}
+                          />
+                        }
+                        label={
+                          <Typography variant="body2" sx={{ fontSize: '0.8rem' }}>
+                            Apply Referral Discount
+                          </Typography>
+                        }
+                      />
+                    )}
+                  </Box>
+                )}
                 <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, alignItems: 'center' }}>
                   <Select
                     value={discountType === null ? "none" : discountType}
@@ -1043,6 +1133,26 @@ export function JobCard({
                     </Typography>
                     <Typography variant="body2" sx={{ fontSize: '0.875rem', color: "error.main", fontWeight: 500 }}>
                       -{formatPrice(discountAmount)}
+                    </Typography>
+                  </Box>
+                )}
+                {referralDiscountAmount > 0 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'error.main' }}>
+                      Referral Discount
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: '0.875rem', color: "error.main", fontWeight: 500 }}>
+                      -{formatPrice(referralDiscountAmount)}
+                    </Typography>
+                  </Box>
+                )}
+                {referralCreditApplied > 0 && (
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ fontSize: '0.875rem', fontWeight: 500, color: 'error.main' }}>
+                      Referral Credit Applied
+                    </Typography>
+                    <Typography variant="body2" sx={{ fontSize: '0.875rem', color: "error.main", fontWeight: 500 }}>
+                      -{formatPrice(referralCreditApplied)}
                     </Typography>
                   </Box>
                 )}

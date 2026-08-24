@@ -1,6 +1,7 @@
 import {
   Assessment,
   AttachMoney,
+  CardGiftcard,
   ReceiptLong,
   Settings,
   Storefront,
@@ -64,6 +65,13 @@ export const TENANT_MODULES = [
     path: "/admin/account-settings",
     icon: Settings,
     match: (pathname) => pathname.startsWith("/admin/account-settings"),
+  },
+  {
+    key: "referrals",
+    label: "Referrals",
+    path: "/admin/referrals",
+    icon: CardGiftcard,
+    match: (pathname) => pathname.startsWith("/admin/referrals"),
   },
 ]
 

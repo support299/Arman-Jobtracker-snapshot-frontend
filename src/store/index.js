@@ -33,6 +33,7 @@ import { dashboardApi } from './api/dashboardApi';
 import { contactProfileApi } from './api/contactProfileApi';
 import { accountSettingsApi } from './api/accountSettingsApi';
 import { platformApi } from './api/platformApi';
+import { referralsApi } from './api/referralsApi';
 
 const persistConfig = {
   key: 'booking',
@@ -75,6 +76,7 @@ export const store = configureStore({
     [accountSettingsApi.reducerPath]: accountSettingsApi.reducer,
     [platformApi.reducerPath]: platformApi.reducer,
     [payrollApi.reducerPath]: payrollApi.reducer,
+    [referralsApi.reducerPath]: referralsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -110,6 +112,7 @@ export const store = configureStore({
       .concat(accountSettingsApi.middleware)
       .concat(platformApi.middleware)
       .concat(payrollApi.middleware)
+      .concat(referralsApi.middleware)
 });
 
 export const persistor = persistStore(store);
