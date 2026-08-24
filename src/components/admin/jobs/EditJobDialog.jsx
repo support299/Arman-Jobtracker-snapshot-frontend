@@ -168,6 +168,11 @@ export function EditJobDialog({
       setCustomServices(extractedCustomServices);
       setJobServices(servicesFromJob);
 
+      // Local Contact pk: the API returns it as `contact` (FK id) or inside
+      // contact_details — NOT as `contact_id` (which is write-only on the API).
+      const localContactId = job.contact ?? job.contact_details?.id ?? null;
+      const localAddressId = job.address ?? job.address_details?.id ?? null;
+
       // Set form data directly from job structure
       setFormData({
         title: job.title || "",
@@ -184,7 +189,7 @@ export function EditJobDialog({
         status: objective === 'convert'? "pending": job.status || "pending",
         total_price: job.total_price || 0,
         quoted_by: job.quoted_by || null,
-        contact_id: job.contact_id || null,
+        contact_id: localContactId,
         ghl_contact_id: job.ghl_contact_id || "",
         repeat_every: job.repeat_every || null,
         repeat_unit: job.repeat_unit || null,
@@ -194,12 +199,11 @@ export function EditJobDialog({
         day_of_week: job.day_of_week
       });
 
-      // Set contact state if contact_id exists
-      if (job.contact_id) {
-        setSelectedContactId(job.contact_id);
-        // Try to find address_id if job has address_id field
-        if (job.address_id) {
-          setSelectedAddressId(job.address_id);
+      // Set contact state if the job is linked to a local Contact
+      if (localContactId) {
+        setSelectedContactId(localContactId);
+        if (localAddressId) {
+          setSelectedAddressId(localAddressId);
           setAddressEdited(false);
           // Set original address string from job data
           setOriginalAddressString(job.customer_address || "");
@@ -217,7 +221,7 @@ export function EditJobDialog({
         setOriginalAddressString("");
       }
     }
-  }, [open, job?.id, job?.customer_address, job?.contact_id, job?.address_id, job?.scheduled_at, job?.status]);
+  }, [open, job?.id, job?.customer_address, job?.contact, job?.contact_details?.id, job?.address, job?.scheduled_at, job?.status]);
 
   // Helper to get selected service IDs
   const getSelectedServiceIds = () => {
