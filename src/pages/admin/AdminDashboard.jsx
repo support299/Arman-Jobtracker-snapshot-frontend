@@ -2023,7 +2023,7 @@ export const AdminDashboard = () => {
                       Wallet credit applied (completed)
                     </Typography>
                     <Typography variant="h6" fontWeight={700} color="error.main">
-                      −{formatCurrency(leadFunnelData.referral_bonus.wallet_credit_applied)}
+                      −{formatCurrency(leadFunnelData.referral_bonus.wallet_credit_applied || 0)}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       Deducted from closed revenue
@@ -2034,7 +2034,7 @@ export const AdminDashboard = () => {
                       Friend discount applied (completed)
                     </Typography>
                     <Typography variant="h6" fontWeight={700} color="error.main">
-                      −{formatCurrency(leadFunnelData.referral_bonus.friend_discount_applied)}
+                      −{formatCurrency(leadFunnelData.referral_bonus.friend_discount_applied || 0)}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       First-job referral discount
@@ -2056,7 +2056,7 @@ export const AdminDashboard = () => {
                       Pending referrals
                     </Typography>
                     <Typography variant="h6" fontWeight={700}>
-                      {leadFunnelData.referral_bonus.pending_referrals_count}
+                      {leadFunnelData.referral_bonus.pending_referrals_count || 0}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       Expected friend discount{' '}
@@ -2090,9 +2090,9 @@ export const AdminDashboard = () => {
                       Closed revenue gross → net
                     </Typography>
                     <Typography variant="body1" fontWeight={700}>
-                      {formatCurrency(leadFunnelData.referral_bonus.gross_closed_revenue)}
+                      {formatCurrency(leadFunnelData.referral_bonus.gross_closed_revenue || 0)}
                       {' → '}
-                      {formatCurrency(leadFunnelData.referral_bonus.net_closed_revenue)}
+                      {formatCurrency(leadFunnelData.referral_bonus.net_closed_revenue || 0)}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       After all discounts & referral credits
@@ -2103,15 +2103,20 @@ export const AdminDashboard = () => {
                       Friend discount pending on jobs
                     </Typography>
                     <Typography variant="h6" fontWeight={700} color="warning.main">
-                      {formatCurrency(leadFunnelData.referral_bonus.friend_discount_pending_on_jobs)}
+                      {formatCurrency(leadFunnelData.referral_bonus.friend_discount_pending_on_jobs || 0)}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">
                       On open jobs in this period
                     </Typography>
                   </Box>
                 </Box>
+              ) : leadFunnelData ? (
+                <Alert severity="warning">
+                  Referral bonus stats are not available from the API yet. Deploy / restart the backend so
+                  lead_funnel_report returns <strong>referral_bonus</strong>, then refresh this page.
+                </Alert>
               ) : (
-                <Alert severity="info">No referral bonus data for this period</Alert>
+                <Alert severity="info">No lead funnel data loaded for this period</Alert>
               )}
             </CardContent>
           </Card>
