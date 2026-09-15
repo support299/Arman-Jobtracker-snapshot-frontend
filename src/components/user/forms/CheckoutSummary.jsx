@@ -50,7 +50,7 @@ import {
   History,
 } from '@mui/icons-material';
 import { useCalculatePriceMutation } from '../../../store/api/user/priceApi';
-import { useCreateCustomProductMutation, useDeleteCustomProductMutation, useGetQuoteDetailsQuery, useUpdateCustomProductMutation, useDeleteServiceMutation, useGetGlobalPriceQuery, useRejectQuoteMutation, useUpdateAdditionalDataMutation, usePersistQuoteSnapshotMutation } from '../../../store/api/user/quoteApi';
+import { useCreateCustomProductMutation, useDeleteCustomProductMutation, useGetQuoteDetailsQuery, useUpdateCustomProductMutation, useDeleteServiceMutation, useGetGlobalPriceQuery, useRejectQuoteMutation, useUpdateAdditionalDataMutation, usePersistQuoteSnapshotMutation, useUpdateSubmissionMutation } from '../../../store/api/user/quoteApi';
 import { useGetContactReferralCreditQuery } from '../../../store/api/referralsApi';
 import SignatureCanvas from 'react-signature-canvas';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
@@ -126,6 +126,7 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
   const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
   const [isPersistingSnapshot, setIsPersistingSnapshot] = useState(false);
   const [persistedSnapshotId, setPersistedSnapshotId] = useState(null);
+  const [technicianNotes, setTechnicianNotes] = useState('');
 
   const [searchParams] = useSearchParams();
   const submissionIdFromUrl = searchParams.get("submission_id");
@@ -149,10 +150,12 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
   const [deleteService, { isLoading: isDeleting }] = useDeleteServiceMutation();
   const [rejectQuote, { isLoading: isRejecting }] = useRejectQuoteMutation();
   const [updateAdditionalData] = useUpdateAdditionalDataMutation();
+  const [updateSubmission] = useUpdateSubmissionMutation();
   const [persistQuoteSnapshot] = usePersistQuoteSnapshotMutation();
 
   const sigCanvasRef = useRef(null);
   const autoSaveTimeoutRef = useRef(null);
+  const techNotesTimeoutRef = useRef(null);
   const notesTextareaRef = useRef(null);
 
   const quoteData = useMemo(() => response, [response]);
@@ -312,6 +315,16 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
     }
   }, [quoteData?.additional_data?.additional_notes]);
 
+  useEffect(() => {
+    if (isPublicMode) return;
+    const saved = quoteData?.technician_notes;
+    const legacy = quoteData?.quote_origin === 'public' ? '' : (quoteData?.additional_data?.additional_notes || '');
+    const next = (saved || legacy || '').trim();
+    if (next && !technicianNotes) {
+      setTechnicianNotes(saved || legacy || '');
+    }
+  }, [quoteData?.technician_notes, quoteData?.additional_data?.additional_notes, quoteData?.quote_origin, isPublicMode]);
+
   // Check if notes are submitted (read-only)
   const isNotesSubmitted = readOnly || quoteData?.is_persisted_snapshot || quoteData?.additional_data?.is_submitted === true;
 
@@ -364,7 +377,7 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
       adjustTextareaHeight();
     }, 0);
     return () => clearTimeout(timer);
-  }, [additionalNotes, adjustTextareaHeight]);
+  }, [additionalNotes, technicianNotes, adjustTextareaHeight]);
 
   // Auto-save additional notes with debouncing
   const autoSaveAdditionalNotes = useCallback((notes) => {
@@ -408,11 +421,41 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
     }, 1000); // Wait 1 second after user stops typing
   }, [data.submission_id, updateAdditionalData, isNotesSubmitted]);
 
+  const isTechNotesReadOnly = readOnly || quoteData?.is_persisted_snapshot;
+  const autoSaveTechnicianNotes = useCallback((notes) => {
+    if (techNotesTimeoutRef.current) {
+      clearTimeout(techNotesTimeoutRef.current);
+    }
+    if (!data.submission_id || isTechNotesReadOnly) {
+      return;
+    }
+    techNotesTimeoutRef.current = setTimeout(async () => {
+      setIsSavingNotes(true);
+      try {
+        await updateSubmission({
+          id: data.submission_id,
+          technician_notes: notes || '',
+        }).unwrap();
+        setToastMessage('Technician notes saved');
+        setToastOpen(true);
+      } catch (error) {
+        console.error('Failed to save technician notes:', error);
+        setToastMessage('Failed to save technician notes. Please try again.');
+        setToastOpen(true);
+      } finally {
+        setIsSavingNotes(false);
+      }
+    }, 1000);
+  }, [data.submission_id, updateSubmission, isTechNotesReadOnly]);
+
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
       if (autoSaveTimeoutRef.current) {
         clearTimeout(autoSaveTimeoutRef.current);
+      }
+      if (techNotesTimeoutRef.current) {
+        clearTimeout(techNotesTimeoutRef.current);
       }
     };
   }, []);
@@ -776,7 +819,7 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
               onClick={() =>
                 handleDownloadPDF(
                   setIsGeneratingPDF,
-                  quoteData,
+                  { ...quoteData, technician_notes: technicianNotes || quoteData.technician_notes },
                   contact,
                   address,
                   quote_schedule,
@@ -786,7 +829,8 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
                   additional_data,
                   house_sqft,
                   profile,
-                  locationId
+                  locationId,
+                  { includeTechnicianNotes: !isPublicMode }
                 )
               }
               disabled={isGeneratingPDF}
@@ -1326,13 +1370,15 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
           </Card>
         )}
 
-        {/* Additional Notes */}
+        {/* Additional Notes / private technician notes */}
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 3 }}>
+            {isPublicMode ? (
+            <>
             <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
               <Box display="flex" alignItems="center" gap={1}>
-                <Typography variant="h6" fontWeight={600} sx={{ color: isPublicMode ? '#0f766e' : '#023c8f' }}>
-                  {isPublicMode ? 'Your Notes' : 'Additional Notes'}
+                <Typography variant="h6" fontWeight={600} sx={{ color: '#0f766e' }}>
+                  Your Notes
                 </Typography>
                 {isNotesSubmitted && (
                   <Lock sx={{ color: '#666', fontSize: 18 }} />
@@ -1382,14 +1428,11 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
                 const newValue = e.target.value;
                 setAdditionalNotes(newValue);
                 onUpdate({ additionalNotes: newValue, termsAccepted });
-                // Auto-save with debouncing
                 autoSaveAdditionalNotes(newValue);
-                // Adjust height after state update
                 setTimeout(adjustTextareaHeight, 0);
               }}
-              onInput={(e) => {
+              onInput={() => {
                 if (isNotesSubmitted) return;
-                // Adjust height on input for immediate feedback
                 adjustTextareaHeight();
               }}
               helperText={
@@ -1417,19 +1460,6 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
               }}
               sx={{
                 '& .MuiOutlinedInput-root': {
-                  transition: 'all 0.2s ease-in-out',
-                  '&:hover fieldset': {
-                    borderColor: isNotesSubmitted ? '#e0e0e0' : '#023c8f',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: isNotesSubmitted ? '#e0e0e0' : '#023c8f',
-                  },
-                  '&.Mui-disabled': {
-                    backgroundColor: '#f5f5f5',
-                    '& fieldset': {
-                      borderColor: '#e0e0e0',
-                    },
-                  },
                   '& textarea': {
                     resize: 'none',
                     overflow: 'hidden',
@@ -1439,34 +1469,74 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
                     cursor: isNotesSubmitted ? 'not-allowed' : 'text',
                   },
                 },
-                '& .MuiFormHelperText-root': {
-                  marginLeft: 0,
-                  marginRight: 0,
+              }}
+            />
+            </>
+            ) : (
+            <>
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
+              <Box display="flex" alignItems="center" gap={1}>
+                <Typography variant="h6" fontWeight={600} sx={{ color: '#023c8f' }}>
+                  Private technician notes
+                </Typography>
+                {isSavingNotes && (
+                  <Box display="flex" alignItems="center" gap={1}>
+                    <CircularProgress size={16} sx={{ color: '#023c8f' }} />
+                    <Typography variant="caption" sx={{ color: '#023c8f', fontSize: '0.75rem' }}>
+                      Saving...
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
+            </Box>
+            <TextField
+              inputRef={notesTextareaRef}
+              placeholder="Gate codes, hose bib, dog in yard, crew instructions… customer will not see this."
+              multiline
+              fullWidth
+              disabled={isTechNotesReadOnly}
+              value={technicianNotes || ''}
+              onChange={(e) => {
+                if (isTechNotesReadOnly) return;
+                const newValue = e.target.value;
+                setTechnicianNotes(newValue);
+                autoSaveTechnicianNotes(newValue);
+                setTimeout(adjustTextareaHeight, 0);
+              }}
+              helperText={
+                <Box display="flex" justifyContent="space-between" alignItems="center" mt={0.5}>
+                  <Typography variant="caption" sx={{ color: '#666', fontSize: '0.75rem' }}>
+                    {isTechNotesReadOnly
+                      ? 'These notes are locked on the signed proposal copy'
+                      : 'Saved automatically. Shown to technicians on the signed proposal, not to the customer or on the invoice.'}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#666', fontSize: '0.75rem' }}>
+                    {(technicianNotes?.length || 0)} / 2000 characters
+                  </Typography>
+                </Box>
+              }
+              inputProps={{
+                maxLength: 2000,
+                readOnly: isTechNotesReadOnly,
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  '& textarea': {
+                    resize: 'none',
+                    overflow: 'hidden',
+                    minHeight: '80px !important',
+                    lineHeight: '1.5',
+                    padding: '14px',
+                  },
                 },
               }}
             />
-            {/* Warning message when notes are editable */}
-            {!isNotesSubmitted && (
-              <Alert 
-                severity="warning" 
-                sx={{ 
-                  mt: 2,
-                  '& .MuiAlert-icon': {
-                    color: '#ed6c02',
-                  },
-                  '& .MuiAlert-message': {
-                    color: '#856404',
-                    fontSize: '0.875rem',
-                  }
-                }}
-              >
-                <Typography variant="body2" sx={{ fontWeight: 500, mb: 0.5 }}>
-                  ⚠️ Important Notice
-                </Typography>
-                <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                The Note area is reserved for internal notes for employees and staff.
-                </Typography>
+            {!isTechNotesReadOnly && (
+              <Alert severity="info" sx={{ mt: 2 }}>
+                Customer cannot see these notes. They appear on the signed proposal for technicians only.
               </Alert>
+            )}
+            </>
             )}
           </CardContent>
         </Card>

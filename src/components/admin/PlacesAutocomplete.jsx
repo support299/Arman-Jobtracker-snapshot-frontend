@@ -14,7 +14,14 @@ import {
 } from "@mui/material"
 import { LocationOn } from "@mui/icons-material"
 
-export const PlacesAutocomplete = ({ value, onChange, error, helperText }) => {
+export const PlacesAutocomplete = ({
+  value,
+  onChange,
+  error,
+  helperText,
+  label = "Address",
+  placeholder = "Search for a location...",
+}) => {
   const [inputValue, setInputValue] = useState(value || "")
   const [suggestions, setSuggestions] = useState([])
   const [isLoading, setIsLoading] = useState(false)
@@ -107,7 +114,7 @@ export const PlacesAutocomplete = ({ value, onChange, error, helperText }) => {
       <Box sx={{ position: "relative" }}>
         <TextField
           fullWidth
-          label="Address"
+          label={label}
           value={inputValue}
           onChange={handleInputChange}
           onFocus={() => suggestions.length > 0 && setShowSuggestions(true)}
@@ -115,7 +122,7 @@ export const PlacesAutocomplete = ({ value, onChange, error, helperText }) => {
           helperText={
             helperText || (isGoogleLoaded ? "Start typing to search for places..." : "Loading Google Places...")
           }
-          placeholder="Search for a location..."
+          placeholder={placeholder}
           disabled={!isGoogleLoaded}
           InputProps={{
             endAdornment: isLoading && <CircularProgress size={20} />,
@@ -129,7 +136,7 @@ export const PlacesAutocomplete = ({ value, onChange, error, helperText }) => {
               top: "100%",
               left: 0,
               right: 0,
-              zIndex: 1300,
+              zIndex: 2000,
               maxHeight: 200,
               overflow: "auto",
               mt: 1,

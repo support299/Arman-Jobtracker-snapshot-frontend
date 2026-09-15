@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import {
   Alert,
   Box,
@@ -22,9 +22,11 @@ import {
   TextField,
   Typography,
 } from "@mui/material"
-import { CardGiftcard, ContentCopy, Save } from "@mui/icons-material"
+import { CardGiftcard, ContentCopy, Save, Redeem } from "@mui/icons-material"
 import {
   useGetReferralDashboardQuery,
+  useGetReferralProgramQuery,
+  useGetReferralGiftCardQuery,
   useUpdateReferralProgramMutation,
 } from "../../store/api/referralsApi"
 
@@ -32,20 +34,27 @@ const money = (cents) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format((Number(cents) || 0) / 100)
 
 const ReferralOwnerDashboard = () => {
-  const { data, isLoading, error, refetch } = useGetReferralDashboardQuery()
+  const { data: programData, isLoading: programLoading, error: programError } = useGetReferralProgramQuery()
+  const { data, isLoading: dashLoading, error, refetch } = useGetReferralDashboardQuery()
   const [updateProgram, { isLoading: saving }] = useUpdateReferralProgramMutation()
+  const [section, setSection] = useState("referrals")
   const [tab, setTab] = useState(0)
   const [message, setMessage] = useState(null)
   const [form, setForm] = useState(null)
 
+  const {
+    data: giftCardData,
+    isLoading: giftCardLoading,
+    error: giftCardError,
+  } = useGetReferralGiftCardQuery(undefined, { skip: section !== "giftcards" })
+
+  const giftCardUrl = giftCardData?.configured ? giftCardData.purchase_url : null
+  const giftCardLocationId = giftCardData?.location_id || ""
+
   useEffect(() => {
     if (data?.program) setForm({ ...data.program })
-  }, [data])
-
-  const pending = useMemo(
-    () => (data?.referrals || []).filter((r) => r.status === "pending"),
-    [data]
-  )
+    else if (programData) setForm({ ...programData })
+  }, [data, programData])
 
   const setField = (key, value) => setForm((prev) => ({ ...prev, [key]: value }))
 
@@ -76,7 +85,15 @@ const ReferralOwnerDashboard = () => {
     }
   }
 
-  if (isLoading || !form) {
+  if (programError && section === "referrals") {
+    return (
+      <Box sx={{ p: 3 }}>
+        <Alert severity="error">{programError?.data?.detail || "Failed to load referral program."}</Alert>
+      </Box>
+    )
+  }
+
+  if ((programLoading || !form) && section === "referrals") {
     return (
       <Box sx={{ p: 4, display: "flex", justifyContent: "center" }}>
         <CircularProgress />
@@ -84,40 +101,110 @@ const ReferralOwnerDashboard = () => {
     )
   }
 
-  if (error) {
-    return (
-      <Box sx={{ p: 3 }}>
-        <Alert severity="error">{error?.data?.detail || "Failed to load referral dashboard."}</Alert>
-      </Box>
-    )
-  }
-
-  const stats = data.stats || {}
+  const stats = data?.stats || {}
+  const listsLoading = dashLoading && data == null
+  const referrals = data?.referrals || []
+  const customers = data?.customers || []
+  const ledger = data?.ledger || []
 
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       <Stack direction="row" alignItems="center" spacing={1.5} sx={{ mb: 2 }}>
         <CardGiftcard color="primary" />
         <Box>
-          <Typography variant="h5" fontWeight={700}>Customer Referrals</Typography>
+          <Typography variant="h5" fontWeight={700}>
+            {section === "giftcards" ? "Gift Cards" : "Customer Referrals"}
+          </Typography>
           <Typography variant="body2" color="text.secondary">
-            Homeowner referral credits for this subaccount — not B2B partner referrals.
+            {section === "giftcards"
+              ? "Customer gift card purchase page for this subaccount."
+              : "Homeowner referral credits for this subaccount — not B2B partner referrals."}
           </Typography>
         </Box>
       </Stack>
 
+      <Tabs
+        value={section}
+        onChange={(_, v) => setSection(v)}
+        sx={{ mb: 2, borderBottom: 1, borderColor: "divider" }}
+      >
+        <Tab icon={<CardGiftcard fontSize="small" />} iconPosition="start" label="Referrals" value="referrals" />
+        <Tab icon={<Redeem fontSize="small" />} iconPosition="start" label="Gift Cards" value="giftcards" />
+      </Tabs>
+
+      {section === "giftcards" && (
+        <Box>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            This is the page your <strong>customers</strong> use to purchase gift cards. Share this
+            link on your website, emails, or SMS campaigns.
+          </Alert>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            To <strong>manage gift cards</strong>, view orders, and track redemptions, open{" "}
+            <strong>Payment → Gift Card</strong> in your GoHighLevel subaccount menu.
+          </Alert>
+
+          {giftCardError && (
+            <Alert severity="error" sx={{ mb: 2 }}>
+              {giftCardError?.data?.detail || "Failed to load gift card settings."}
+            </Alert>
+          )}
+
+          {giftCardLoading ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+              <CircularProgress />
+            </Box>
+          ) : giftCardUrl ? (
+            <Card variant="outlined" sx={{ overflow: "hidden" }}>
+              <Box
+                component="iframe"
+                src={giftCardUrl}
+                title="Gift card purchase"
+                sx={{
+                  display: "block",
+                  width: "100%",
+                  minHeight: { xs: 520, md: "calc(100vh - 280px)" },
+                  height: { xs: 520, md: "calc(100vh - 280px)" },
+                  border: 0,
+                  bgcolor: "background.default",
+                }}
+              />
+            </Card>
+          ) : (
+            <Alert severity="warning">
+              <Typography variant="subtitle2" fontWeight={700} gutterBottom>
+                Gift card page not configured
+              </Typography>
+              <Typography variant="body2">
+                No customer gift card purchase link is set up for this subaccount
+                {giftCardLocationId ? ` (${giftCardLocationId})` : ""}. Contact your administrator to add a payment
+                link, or configure gift cards under <strong>Payment → Gift Card</strong> in
+                GoHighLevel first.
+              </Typography>
+            </Alert>
+          )}
+        </Box>
+      )}
+
+      {section === "referrals" && (
+        <>
       {message && (
         <Alert severity={message.type} sx={{ mb: 2 }} onClose={() => setMessage(null)}>
           {message.text}
         </Alert>
       )}
 
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error?.data?.detail || "Failed to load referral lists."}
+        </Alert>
+      )}
+
       <Grid container spacing={2} sx={{ mb: 2 }}>
         {[
-          ["Qualified", stats.qualified, "successful referrals"],
-          ["Pending", stats.pending, "awaiting paid invoice"],
-          ["Credits issued", money(stats.credits_issued_cents), `${money(stats.credits_available_cents)} available`],
-          ["Revenue influenced", money(stats.influenced_revenue_cents), "from qualified invoices"],
+          ["Qualified", listsLoading ? "…" : (stats.qualified ?? 0), "successful referrals"],
+          ["Pending", listsLoading ? "…" : (stats.pending ?? 0), "awaiting paid invoice"],
+          ["Credits issued", listsLoading ? "…" : money(stats.credits_issued_cents), listsLoading ? "" : `${money(stats.credits_available_cents)} available`],
+          ["Revenue influenced", listsLoading ? "…" : money(stats.influenced_revenue_cents), "from qualified invoices"],
         ].map(([label, value, hint]) => (
           <Grid item xs={12} sm={6} md={3} key={label}>
             <Card variant="outlined">
@@ -133,7 +220,7 @@ const ReferralOwnerDashboard = () => {
 
       <Tabs value={tab} onChange={(_, v) => setTab(v)} sx={{ mb: 2 }}>
         <Tab label="Program settings" />
-        <Tab label={`Referrals (${(data?.referrals || []).length})`} />
+        <Tab label={`Referrals (${listsLoading ? "…" : referrals.length})`} />
         <Tab label="Customers" />
         <Tab label="Credit ledger" />
       </Tabs>
@@ -263,43 +350,47 @@ const ReferralOwnerDashboard = () => {
               The new customer gets the referral discount on their first job; the referrer's
               wallet is credited automatically when that invoice is fully paid.
             </Typography>
-            <Stack divider={<Divider />} spacing={1.5}>
-              {(data.referrals || []).length === 0 && (
-                <Typography color="text.secondary">No referrals yet.</Typography>
-              )}
-              {(data.referrals || []).map((r) => (
-                <Stack key={r.id} direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1}>
-                  <Box>
-                    <Typography fontWeight={600}>{r.referred_name}</Typography>
-                    <Typography variant="body2" color="text.secondary">
-                      Referred by {r.referrer_name} · {r.referred_email}
-                      {r.referral_code ? ` · Code ${r.referral_code}` : ""}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {new Date(r.created_at).toLocaleDateString()}
-                      {r.friend_discount_cents > 0 && ` · Discount ${money(r.friend_discount_cents)}`}
-                      {r.discount_disabled && ` (disabled${r.discount_disabled_by ? ` by ${r.discount_disabled_by}` : ""})`}
-                      {r.reward_credited_cents > 0 && r.reward_credited_at &&
-                        ` · Reward ${money(r.reward_credited_cents)} credited ${new Date(r.reward_credited_at).toLocaleDateString()}`}
-                      {r.qualifying_invoice_id && ` · Invoice ${r.qualifying_invoice_id}`}
-                    </Typography>
-                  </Box>
-                  <Chip
-                    size="small"
-                    label={r.status === "qualified" ? "Rewarded" : r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                    color={
-                      r.status === "qualified"
-                        ? "success"
-                        : r.status === "pending"
-                          ? "warning"
-                          : r.status === "reversed"
-                            ? "error"
-                            : "default"
-                    }
-                  />
-                </Stack>
-              ))}
-            </Stack>
+            {listsLoading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}><CircularProgress size={24} /></Box>
+            ) : (
+              <Stack divider={<Divider />} spacing={1.5}>
+                {referrals.length === 0 && (
+                  <Typography color="text.secondary">No referrals yet.</Typography>
+                )}
+                {referrals.map((r) => (
+                  <Stack key={r.id} direction={{ xs: "column", sm: "row" }} justifyContent="space-between" spacing={1}>
+                    <Box>
+                      <Typography fontWeight={600}>{r.referred_name}</Typography>
+                      <Typography variant="body2" color="text.secondary">
+                        Referred by {r.referrer_name} · {r.referred_email}
+                        {r.referral_code ? ` · Code ${r.referral_code}` : ""}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(r.created_at).toLocaleDateString()}
+                        {r.friend_discount_cents > 0 && ` · Discount ${money(r.friend_discount_cents)}`}
+                        {r.discount_disabled && ` (disabled${r.discount_disabled_by ? ` by ${r.discount_disabled_by}` : ""})`}
+                        {r.reward_credited_cents > 0 && r.reward_credited_at &&
+                          ` · Reward ${money(r.reward_credited_cents)} credited ${new Date(r.reward_credited_at).toLocaleDateString()}`}
+                        {r.qualifying_invoice_id && ` · Invoice ${r.qualifying_invoice_id}`}
+                      </Typography>
+                    </Box>
+                    <Chip
+                      size="small"
+                      label={r.status === "qualified" ? "Rewarded" : r.status.charAt(0).toUpperCase() + r.status.slice(1)}
+                      color={
+                        r.status === "qualified"
+                          ? "success"
+                          : r.status === "pending"
+                            ? "warning"
+                            : r.status === "reversed"
+                              ? "error"
+                              : "default"
+                      }
+                    />
+                  </Stack>
+                ))}
+              </Stack>
+            )}
           </CardContent>
         </Card>
       )}
@@ -307,32 +398,36 @@ const ReferralOwnerDashboard = () => {
       {tab === 2 && (
         <Card variant="outlined">
           <CardContent>
-            <Stack divider={<Divider />} spacing={1.5}>
-              {(data.customers || []).map((c) => (
-                <Stack key={c.id} direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1}>
-                  <Box>
-                    <Typography fontWeight={600}>{c.name}</Typography>
-                    <Typography variant="body2" color="text.secondary">{c.email}</Typography>
-                    <Typography variant="caption">Code {c.referral_code} · {c.qualified_referrals} qualified</Typography>
-                  </Box>
-                  <Stack direction="row" spacing={1} alignItems="center">
-                    <Typography variant="body2">{money(c.available_credit_cents)} available</Typography>
-                    <Button
-                      size="small"
-                      startIcon={<ContentCopy />}
-                      onClick={() => navigator.clipboard.writeText(c.share_url)}
-                    >
-                      Copy link
-                    </Button>
+            {listsLoading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}><CircularProgress size={24} /></Box>
+            ) : (
+              <Stack divider={<Divider />} spacing={1.5}>
+                {customers.map((c) => (
+                  <Stack key={c.id} direction={{ xs: "column", md: "row" }} justifyContent="space-between" spacing={1}>
+                    <Box>
+                      <Typography fontWeight={600}>{c.name}</Typography>
+                      <Typography variant="body2" color="text.secondary">{c.email}</Typography>
+                      <Typography variant="caption">Code {c.referral_code} · {c.qualified_referrals} qualified</Typography>
+                    </Box>
+                    <Stack direction="row" spacing={1} alignItems="center">
+                      <Typography variant="body2">{money(c.available_credit_cents)} available</Typography>
+                      <Button
+                        size="small"
+                        startIcon={<ContentCopy />}
+                        onClick={() => navigator.clipboard.writeText(c.share_url)}
+                      >
+                        Copy link
+                      </Button>
+                    </Stack>
                   </Stack>
-                </Stack>
-              ))}
-              {(data.customers || []).length === 0 && (
-                    <Typography color="text.secondary">
-                      No referral links yet. Open any contact and click <b>Get referral link</b>, or complete a job to auto-create one for invites.
-                    </Typography>
-              )}
-            </Stack>
+                ))}
+                {customers.length === 0 && (
+                  <Typography color="text.secondary">
+                    No referral links yet. Open any contact and click <b>Get referral link</b>, or complete a job to auto-create one for invites.
+                  </Typography>
+                )}
+              </Stack>
+            )}
           </CardContent>
         </Card>
       )}
@@ -340,22 +435,28 @@ const ReferralOwnerDashboard = () => {
       {tab === 3 && (
         <Card variant="outlined">
           <CardContent>
-            <Stack divider={<Divider />} spacing={1.5}>
-              {(data.ledger || []).map((e) => (
-                <Stack key={e.id} direction="row" justifyContent="space-between">
-                  <Box>
-                    <Typography fontWeight={600}>{e.customer_name}</Typography>
-                    <Typography variant="body2" color="text.secondary">{e.description || e.entry_type}</Typography>
-                  </Box>
-                  <Typography fontWeight={700} color={e.amount_cents >= 0 ? "success.main" : "text.primary"}>
-                    {e.amount_cents >= 0 ? "+" : ""}{money(e.amount_cents)}
-                  </Typography>
-                </Stack>
-              ))}
-              {(data.ledger || []).length === 0 && <Typography color="text.secondary">No ledger entries yet.</Typography>}
-            </Stack>
+            {listsLoading ? (
+              <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}><CircularProgress size={24} /></Box>
+            ) : (
+              <Stack divider={<Divider />} spacing={1.5}>
+                {ledger.map((e) => (
+                  <Stack key={e.id} direction="row" justifyContent="space-between">
+                    <Box>
+                      <Typography fontWeight={600}>{e.customer_name}</Typography>
+                      <Typography variant="body2" color="text.secondary">{e.description || e.entry_type}</Typography>
+                    </Box>
+                    <Typography fontWeight={700} color={e.amount_cents >= 0 ? "success.main" : "text.primary"}>
+                      {e.amount_cents >= 0 ? "+" : ""}{money(e.amount_cents)}
+                    </Typography>
+                  </Stack>
+                ))}
+                {ledger.length === 0 && <Typography color="text.secondary">No ledger entries yet.</Typography>}
+              </Stack>
+            )}
           </CardContent>
         </Card>
+      )}
+        </>
       )}
     </Box>
   )

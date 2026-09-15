@@ -88,7 +88,9 @@ const Contacts = () => {
     return p;
   }, [page, pageSize, ordering, debouncedSearch]);
 
-  const { data, isLoading, isFetching, error } = useGetDashboardContactsQuery(queryParams);
+  const { data, isLoading, isFetching, error } = useGetDashboardContactsQuery(queryParams, {
+    placeholderData: (previousData) => previousData,
+  });
 
   const rows = data?.results ?? [];
   const total = data?.count ?? 0;

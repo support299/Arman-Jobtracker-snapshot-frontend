@@ -22,6 +22,7 @@ export const TENANT_MODULES = [
     match: (pathname) =>
       pathname.startsWith("/admin/jobs") ||
       pathname.startsWith("/admin/map") ||
+      pathname.startsWith("/admin/fleet") ||
       pathname.startsWith("/admin/on-hold-jobs") ||
       pathname.startsWith("/admin/create-job") ||
       pathname.startsWith("/admin/team") ||

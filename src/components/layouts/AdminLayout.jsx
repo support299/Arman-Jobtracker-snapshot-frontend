@@ -53,7 +53,7 @@ import {
   Dashboard as DashboardIcon,
   AccountCircle,
   Contacts as ContactsIcon,
-  CardGiftcard,
+  LocalShipping,
 } from "@mui/icons-material"
 import { useNavigate, useLocation, useSearchParams } from "react-router-dom"
 import { useDispatch, useSelector } from "react-redux"
@@ -75,10 +75,11 @@ const getNavItemsByRole = (role, fullAccessRoles, user_profile) => {
     // { text: "Dashboard", path: "/admin/dashboard", icon: DashboardIcon, roles: ["admin", "supervisor"] },
     { text: "Jobs", path: "/admin/jobs", icon: WorkOutline, roles: ["admin", "supervisor"] },
     { text: "Map", path: "/admin/map", icon: MapIcon, roles: ["admin", "supervisor"] },
+    { text: "Fleet", path: "/admin/fleet", icon: LocalShipping, roles: ["admin", "supervisor"] },
     { text: "Quotes", path: "/admin/accepted-quotes", icon: ReceiptLong, roles: ["admin", "supervisor"] },
     { text: "Repeat Job Requests", path: "/admin/pending-reschedule-quotes", icon: PublishedWithChanges, roles: ["admin", "supervisor"] },
     { text: "On Hold Jobs", path: "/admin/on-hold-jobs", icon: PauseCircleOutline, roles: ["admin", "supervisor"] },
-    // { text: "Contacts", path: "/admin/contacts", icon: ContactsIcon, roles: ["admin", "supervisor"] },
+    { text: "Contacts", path: "/admin/contacts", icon: ContactsIcon, roles: ["admin", "supervisor"] },
     { text: "Team", path: "/admin/team", icon: Group, roles: ["admin", "supervisor"] },
   ]
 
@@ -162,7 +163,6 @@ const getManagementItemsByRole = (role, fullAccessRoles) => {
     { text: "Service Management", path: "/admin/services", icon: BusinessCenter },
     { text: "Location Management", path: "/admin/locations", icon: LocationOn },
     { text: "Account Settings", path: "/admin/account-settings", icon: Settings },
-    { text: "Referrals", path: "/admin/referrals", icon: CardGiftcard },
     { text: "Platform Portal", path: "/platform/dashboard", icon: AccountTree },
     // { text: "House Size Info", path: "/admin/house-size-info", icon: Home },
   ]
@@ -236,12 +236,18 @@ export const AdminLayout = ({ children }) => {
   const isManagementActive = effectiveManagementItems.some((item) => location.pathname === item.path)
   const showManagementDropdown = effectiveManagementItems.length > 0 && showJobTrackerNav
 
-  // Hide navbar for specific routes
+  // Hide navbar for dedicated embed pages (GHL iframe) and payroll
+  const isDedicatedEmbedPage =
+    location.pathname === "/admin/dashboard" ||
+    location.pathname === "/admin/calendar" ||
+    location.pathname === "/admin/map" ||
+    location.pathname === "/admin/fleet" ||
+    location.pathname === "/admin/referrals"
+
   const shouldHideNavbar =
     !showJobTrackerNav ||
     location.pathname.startsWith("/admin/payroll") ||
-    location.pathname === "/admin/dashboard" ||
-    location.pathname === "/admin/calendar"
+    isDedicatedEmbedPage
 
   const getPayrollBreadcrumb = () => {
     const currentPayrollItem = payrollSubNavItems.find(item => item.path === location.pathname)
@@ -852,9 +858,12 @@ export const AdminLayout = ({ children }) => {
         component="main"
         sx={{
           flexGrow: 1,
-          p: { xs: 2, sm: 3 },
+          p: isDedicatedEmbedPage ? { xs: 1.5, sm: 2 } : { xs: 2, sm: 3 },
           backgroundColor: "hsl(var(--muted) / 0.3)",
-          minHeight: "calc(100vh - 64px)",
+          minHeight: shouldHideNavbar ? "100vh" : "calc(100vh - 64px)",
+          display: isDedicatedEmbedPage ? "flex" : "block",
+          flexDirection: isDedicatedEmbedPage ? "column" : undefined,
+          overflow: isDedicatedEmbedPage ? "hidden" : undefined,
         }}
       >
         {/* Breadcrumb for Payroll Section */}
@@ -885,7 +894,7 @@ export const AdminLayout = ({ children }) => {
         )} */}
         {children}
       </Box>
-      <AdminFooter />
+      {!isDedicatedEmbedPage && <AdminFooter />}
     </Box>
   )
 }

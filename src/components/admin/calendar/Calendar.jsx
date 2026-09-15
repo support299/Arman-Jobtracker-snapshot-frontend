@@ -22,6 +22,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAccountTimezone } from "@/hooks/useAccountTimezone";
 import { useMoneyFormatter } from "@/hooks/useMoneyFormatter";
 import { DayByTechnicianView } from "./DayByTechnicianView";
+import { getUsHolidayMap, toLocalDateKey } from "@/utils/usHolidays";
 // FullCalendar v6 injects CSS via JS – no manual import. Overrides below for design + mobile.
 
 // FullCalendar custom styles – match current design, mobile-friendly, light borders like day view
@@ -66,6 +67,36 @@ const calendarStyles = `
   }
   @media (max-width: 639px) {
     .daily-job-total-fc { font-size: 7px; }
+  }
+  .fc-us-holiday {
+    display: block;
+    font-size: 10px;
+    font-weight: 700;
+    color: #c2410c;
+    line-height: 1.15;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fc .fc-daygrid-day.fc-us-holiday-day {
+    background-color: #fff7ed;
+  }
+  .fc .fc-daygrid-day.fc-day-today.fc-us-holiday-day {
+    background-color: #ffedd5;
+  }
+  .fc .fc-col-header-cell.fc-us-holiday-day {
+    background-color: #fff7ed;
+  }
+  .fc-day-header-with-holiday {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    line-height: 1.2;
+  }
+  @media (max-width: 639px) {
+    .fc-us-holiday { font-size: 8px; }
   }
   /* Legacy RBC styles kept for any leftover refs – can remove once confirmed unused */
   .rbc-calendar {
@@ -1413,14 +1444,29 @@ appointmentsParams.search = filterParams.appointment_search;
     { skip: !selectedJobId }
   );
 
-  // Helper function to get display name (company_name if available, otherwise fallback)
+  // Skip GHL placeholders like "N/A" so calendar cards match Job Details names.
   const getDisplayName = (item, fallbackName, defaultName) => {
-    // Check for company_name in contact_details
-    if (item?.company_name) {
-      return item.company_name;
-    }
-    // Fallback to provided name or default
-    return fallbackName || defaultName;
+    const usable = (value) => {
+      if (value == null) return "";
+      const text = String(value).trim();
+      if (!text) return "";
+      const lower = text.toLowerCase();
+      if (["n/a", "na", "n.a.", "n.a", "none", "unknown", "customer"].includes(lower)) return "";
+      return text;
+    };
+    const contactName = usable(
+      [item?.contact_details?.first_name, item?.contact_details?.last_name].filter(Boolean).join(" ")
+    );
+    return (
+      usable(item?.company_name) ||
+      usable(item?.contact_company_name) ||
+      usable(fallbackName) ||
+      usable(item?.customer_name) ||
+      usable(item?.contact_name) ||
+      contactName ||
+      usable(item?.title) ||
+      defaultName
+    );
   };
 
   // Current user id for worker view (single column, no assignee names)
@@ -1801,6 +1847,11 @@ appointmentsParams.search = filterParams.appointment_search;
     () => (view === "day" ? events : rawEvents),
     [view, events, rawEvents]
   );
+
+  const usHolidayMap = useMemo(() => {
+    const year = currentDate.getFullYear();
+    return getUsHolidayMap([year - 1, year, year + 1]);
+  }, [currentDate]);
 
   // FullCalendar event format (id, title, start, end, extendedProps, editable)
   const fcEvents = useMemo(
@@ -3380,6 +3431,31 @@ appointmentsParams.search = filterParams.appointment_search;
                     allDaySlot={false}
                     nowIndicator
                     editable
+                    dayCellClassNames={(arg) => (usHolidayMap[toLocalDateKey(arg.date)] ? ["fc-us-holiday-day"] : [])}
+                    dayHeaderClassNames={(arg) => (usHolidayMap[toLocalDateKey(arg.date)] ? ["fc-us-holiday-day"] : [])}
+                    dayCellContent={(arg) => {
+                      const holidayName = usHolidayMap[toLocalDateKey(arg.date)];
+                      return (
+                        <div className="flex flex-col items-end gap-0.5 w-full min-w-0">
+                          <span>{arg.dayNumberText}</span>
+                          {holidayName ? (
+                            <span className="fc-us-holiday" title={holidayName}>
+                              {holidayName}
+                            </span>
+                          ) : null}
+                        </div>
+                      );
+                    }}
+                    dayHeaderContent={(arg) => {
+                      const holidayName = view === "month" ? "" : usHolidayMap[toLocalDateKey(arg.date)];
+                      if (!holidayName) return arg.text;
+                      return (
+                        <div className="fc-day-header-with-holiday">
+                          <span>{arg.text}</span>
+                          <span className="fc-us-holiday" title={holidayName}>{holidayName}</span>
+                        </div>
+                      );
+                    }}
                     eventStartEditable={(info) =>
                       info.event.extendedProps?.type !== "appointment" &&
                       info.event.extendedProps?.type !== "more" &&

@@ -31,9 +31,8 @@ import { assigneesApi } from './api/assigneesApi';
 import { payrollApi } from './api/payrollApi';
 import { dashboardApi } from './api/dashboardApi';
 import { contactProfileApi } from './api/contactProfileApi';
-import { accountSettingsApi } from './api/accountSettingsApi';
-import { platformApi } from './api/platformApi';
 import { referralsApi } from './api/referralsApi';
+import { onestepgpsApi } from './api/onestepgpsApi';
 
 const persistConfig = {
   key: 'booking',
@@ -73,10 +72,9 @@ export const store = configureStore({
     [assigneesApi.reducerPath]: assigneesApi.reducer,
     [dashboardApi.reducerPath]: dashboardApi.reducer,
     [contactProfileApi.reducerPath]: contactProfileApi.reducer,
-    [accountSettingsApi.reducerPath]: accountSettingsApi.reducer,
-    [platformApi.reducerPath]: platformApi.reducer,
     [payrollApi.reducerPath]: payrollApi.reducer,
     [referralsApi.reducerPath]: referralsApi.reducer,
+    [onestepgpsApi.reducerPath]: onestepgpsApi.reducer,
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
@@ -109,10 +107,9 @@ export const store = configureStore({
       .concat(assigneesApi.middleware)
       .concat(dashboardApi.middleware)
       .concat(contactProfileApi.middleware)
-      .concat(accountSettingsApi.middleware)
-      .concat(platformApi.middleware)
       .concat(payrollApi.middleware)
       .concat(referralsApi.middleware)
+      .concat(onestepgpsApi.middleware)
 });
 
 export const persistor = persistStore(store);

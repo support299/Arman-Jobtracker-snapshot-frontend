@@ -62,6 +62,7 @@ export const jobsApi = createApi({
         if (params.job_type) queryParams.job_type = params.job_type;
         if (params.assignee_ids) queryParams.assignee_ids = params.assignee_ids;
         if (params.search) queryParams.search = params.search;
+        if (params.scope) queryParams.scope = params.scope;
         if (params.unassigned === true || params.unassigned === 'true') queryParams.unassigned = true;
         return { url: 'occurrences/', params: queryParams };
       },
@@ -208,6 +209,26 @@ export const jobsApi = createApi({
       },
     }),
 
+    getSubaccountOffice: builder.query({
+      queryFn: async () => {
+        try {
+          const result = await axiosInstance({
+            url: '/accounts/subaccount-office/',
+            method: 'GET',
+          });
+          return { data: result.data };
+        } catch (error) {
+          return {
+            error: {
+              status: error.response?.status,
+              data: error.response?.data || error.message,
+            },
+          };
+        }
+      },
+      keepUnusedDataFor: 300,
+    }),
+
     // Get Addresses by Contact (for admin job creation) - uses quote API
     getAddressesByContact: builder.query({
       queryFn: async (contactId) => {
@@ -242,6 +263,7 @@ export const {
   useDeleteJobSeriesMutation,
   useGetJobsByLocationQuery,
   useGetLocationsQuery,
+  useGetSubaccountOfficeQuery,
 
   useGetCalendarJobsQuery,
   useGetAppointmentsCalendarQuery,

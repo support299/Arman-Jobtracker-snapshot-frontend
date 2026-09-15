@@ -1,4 +1,4 @@
-    import { useState, useEffect } from "react"
+import { useState, useEffect } from "react"
 import {
   Drawer,
   Box,
@@ -150,13 +150,21 @@ export function FilterSidebar({
     }
     if (filters.unassigned) params.unassigned = true;
     if (userRole !== "worker" && filters.assignee_ids.length > 0) {
-      params.assignee_ids = `[${filters.assignee_ids.join(",")}]`;
+      const joined = filters.assignee_ids.join(",");
+      params.assignee_ids = `[${joined}]`;
+      if (isMapMode) {
+        params.assigned_user_ids = joined;
+      }
     }
     onApplyFilters(params);
     onClose();
   };
 
   const handleClear = () => {
+    const defaultAssigneeIds =
+      userRole !== "worker"
+        ? assignees.map((assignee) => assignee.user_id ?? assignee.id).filter(Boolean)
+        : [];
     const clearedFilters = {
       search: "",
       status: "",
@@ -166,13 +174,22 @@ export function FilterSidebar({
       unassigned: false,
       job_search: "",
       estimate_search: "",
-      assignee_ids: [],
+      assignee_ids: defaultAssigneeIds,
     };
     setFilters(clearedFilters);
-    onApplyFilters({});
+    if (userRole !== "worker" && defaultAssigneeIds.length > 0) {
+      const joined = defaultAssigneeIds.join(",");
+      onApplyFilters({
+        assignee_ids: `[${joined}]`,
+        ...(isMapMode ? { assigned_user_ids: joined } : {}),
+      });
+    } else {
+      onApplyFilters({});
+    }
     if (isMapMode && onCategoryToggle) {
       onCategoryToggle("jobs", true);
       onCategoryToggle("estimates", true);
+      onCategoryToggle("vehicles", true);
     }
   };
 
@@ -272,6 +289,15 @@ export function FilterSidebar({
                         />
                       }
                       label="Estimates"
+                    />
+                    <FormControlLabel
+                      control={
+                        <Checkbox
+                          checked={selectedCategories?.vehicles !== false}
+                          onChange={(e) => onCategoryToggle('vehicles', e.target.checked)}
+                        />
+                      }
+                      label="Live vehicles (One Step GPS)"
                     />
                   </Box>
                 </Box>

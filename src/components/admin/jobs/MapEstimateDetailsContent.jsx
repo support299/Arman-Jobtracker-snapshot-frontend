@@ -40,6 +40,7 @@ export function MapEstimateDetailsContent({
   estimatesParams,
   user,
   onDeleted,
+  embeddedInPanel = false,
 }) {
   const accountTimezone = useAccountTimezone();
   const [localEstimate, setLocalEstimate] = useState(estimate);
@@ -133,7 +134,7 @@ export function MapEstimateDetailsContent({
   };
 
   return (
-    <Box sx={{ width: 380, maxWidth: "90vw", p: 2, fontFamily: '"Inter", system-ui, sans-serif' }}>
+    <Box sx={{ width: embeddedInPanel ? "100%" : 380, maxWidth: embeddedInPanel ? "none" : "90vw", p: 2, fontFamily: '"Inter", system-ui, sans-serif' }}>
       <Box sx={{ mb: 2 }}>
         <Chip
           size="small"

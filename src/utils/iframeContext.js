@@ -1,3 +1,15 @@
+/**
+ * GHL custom-menu / iframe embed context (location + SSO identity).
+ *
+ * Custom menu links should pass both email and location_id, e.g.:
+ *   https://snapshot.theservicepilot.com/admin/calendar?email={{user.email}}&location_id={{location.id}}
+ *   https://snapshot.theservicepilot.com/admin/map?email={{user.email}}&location_id={{location.id}}
+ *   https://snapshot.theservicepilot.com/admin/referrals?email={{user.email}}&location_id={{location.id}}
+ * Same pattern for dashboard, payroll, jobtracker, quote, etc.
+ *
+ * location_id is required for multi-tenant SSO.
+ */
+
 const STORAGE_KEY = 'iframe_location_id';
 
 export function getIframeLocationId() {

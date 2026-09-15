@@ -132,6 +132,28 @@ All colors MUST be HSL for consistent theming.
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
   }
+}
+
+/* Google Maps vehicle name/speed labels — bold pill above pin */
+.gps-vehicle-label {
+  background: #ffffff !important;
+  padding: 5px 10px !important;
+  border-radius: 999px !important;
+  border: 1.5px solid rgba(15, 35, 55, 0.14) !important;
+  box-shadow: 0 4px 14px rgba(11, 23, 38, 0.18) !important;
+  transform: translateY(-10px);
+  letter-spacing: 0.01em;
+}
+
+.gps-office-label {
+  background: #eff6ff !important;
+  padding: 5px 10px !important;
+  border-radius: 999px !important;
+  border: 1.5px solid rgba(37, 99, 235, 0.35) !important;
+  box-shadow: 0 4px 14px rgba(37, 99, 235, 0.15) !important;
+  transform: translateY(-10px);
+  letter-spacing: 0.01em;
 }

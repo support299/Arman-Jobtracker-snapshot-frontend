@@ -19,7 +19,8 @@ export const handleDownloadPDF = async (
   additional_data,
   house_sqft,
   companyProfile,
-  locationId
+  locationId,
+  options = {}
 ) => {
   setIsGeneratingPDF(true)
   try {
@@ -526,14 +527,33 @@ export const handleDownloadPDF = async (
     doc.setFontSize(10)
     yPosition += 12
 
-    if (additional_data?.additional_notes) {
+    const extra = additional_data || {}
+    const customerVisibleNotes = (
+      extra.customer_notes ||
+      (quote?.quote_origin === "public" ? extra.additional_notes : "") ||
+      ""
+    ).trim()
+    if (customerVisibleNotes) {
       checkPageBreak(8)
       doc.setFontSize(10)
       doc.setFont(undefined, "bold")
       doc.text("Notes", margin, yPosition)
       yPosition += 6
       doc.setFont(undefined, "normal")
-      yPosition += addWrappedText(additional_data.additional_notes, margin, yPosition) + 4
+      yPosition += addWrappedText(customerVisibleNotes, margin, yPosition) + 4
+    }
+
+    const technicianNotes = options.includeTechnicianNotes
+      ? String(quote?.technician_notes || "").trim()
+      : ""
+    if (technicianNotes) {
+      checkPageBreak(10)
+      doc.setFontSize(10)
+      doc.setFont(undefined, "bold")
+      doc.text("Technician notes (internal — not shown to customer)", margin, yPosition)
+      yPosition += 6
+      doc.setFont(undefined, "normal")
+      yPosition += addWrappedText(technicianNotes, margin, yPosition) + 4
     }
 
     const agreementDate = additional_data?.submitted_at

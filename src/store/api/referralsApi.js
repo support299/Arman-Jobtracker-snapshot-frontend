@@ -4,11 +4,27 @@ import { axiosBaseQuery, BASE_URL } from '../axios/axios'
 export const referralsApi = createApi({
   reducerPath: 'referralsApi',
   baseQuery: axiosBaseQuery({ baseUrl: `${BASE_URL}/referrals/` }),
-  tagTypes: ['ReferralDashboard', 'ReferralProgram', 'ReferralContactCredit'],
+  tagTypes: ['ReferralDashboard', 'ReferralProgram', 'ReferralContactCredit', 'ReferralGiftCard'],
   endpoints: (builder) => ({
+    getReferralGiftCard: builder.query({
+      query: () => ({ url: 'owner/gift-card/' }),
+      providesTags: ['ReferralGiftCard'],
+    }),
+    updateReferralGiftCard: builder.mutation({
+      query: (payload) => ({
+        url: 'owner/gift-card/',
+        method: 'PATCH',
+        data: payload,
+      }),
+      invalidatesTags: ['ReferralGiftCard'],
+    }),
     getReferralDashboard: builder.query({
       query: () => ({ url: 'owner/dashboard/' }),
       providesTags: ['ReferralDashboard'],
+    }),
+    getReferralProgram: builder.query({
+      query: () => ({ url: 'owner/program/' }),
+      providesTags: ['ReferralProgram'],
     }),
     updateReferralProgram: builder.mutation({
       query: (payload) => ({
@@ -55,7 +71,10 @@ export const referralsApi = createApi({
 })
 
 export const {
+  useGetReferralGiftCardQuery,
+  useUpdateReferralGiftCardMutation,
   useGetReferralDashboardQuery,
+  useGetReferralProgramQuery,
   useUpdateReferralProgramMutation,
   useGetContactReferralCreditQuery,
   useEnsureReferralLinkMutation,

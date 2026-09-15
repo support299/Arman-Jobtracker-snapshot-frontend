@@ -2,6 +2,7 @@ import { useRef, useEffect, useState } from "react";
 import { useDrop } from "react-dnd";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { getUsHolidayName } from "@/utils/usHolidays";
 
 const HOURS_START = 6;
 const HOURS_END = 24;
@@ -144,6 +145,7 @@ export function DayByTechnicianView({
   dayStart.setHours(minHour, 0, 0, 0);
   const dayEnd = new Date(date);
   dayEnd.setHours(maxHour, 0, 0, 0);
+  const holidayName = getUsHolidayName(date);
 
   const allDayStripEvents = events.filter(
     (e) =>
@@ -215,6 +217,9 @@ export function DayByTechnicianView({
       <div className="flex-shrink-0 px-1 py-2">
         <h2 className="text-base font-semibold text-foreground" aria-live="polite">
           {formatDayLabel(date)}
+          {holidayName ? (
+            <span className="ml-2 text-sm font-semibold text-orange-700">· {holidayName}</span>
+          ) : null}
         </h2>
       </div>
 
