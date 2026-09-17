@@ -4,12 +4,10 @@ import {
   Alert,
   Box,
   Button,
-  Card,
-  CardContent,
   Chip,
+  Divider,
   FormControl,
   InputAdornment,
-  InputLabel,
   MenuItem,
   Paper,
   Select,
@@ -28,6 +26,7 @@ import {
   useTheme,
 } from '@mui/material';
 import Search from '@mui/icons-material/Search';
+import SwapVert from '@mui/icons-material/SwapVert';
 import { format, parseISO } from 'date-fns';
 import { useGetDashboardContactsQuery } from '../../store/api/dashboardApi';
 import { contactsPageSx } from './contactsTheme';
@@ -45,6 +44,96 @@ const ORDERING_OPTIONS = [
   { value: 'id', label: 'ID (ascending)' },
   { value: '-id', label: 'ID (descending)' },
 ];
+
+const TAX_STATUS_OPTIONS = [
+  { value: '', label: 'All contacts' },
+  { value: 'true', label: 'Tax exempt' },
+  { value: 'false', label: 'Taxable' },
+];
+
+const DND_OPTIONS = [
+  { value: '', label: 'All contacts' },
+  { value: 'true', label: 'Do not disturb' },
+  { value: 'false', label: 'Can contact' },
+];
+
+const ACTIVITY_OPTIONS = [
+  { value: '', label: 'All activity' },
+  { value: 'pending', label: 'Has pending jobs', param: 'has_pending_jobs', bool: 'true' },
+  { value: 'jobs', label: 'Has jobs', param: 'has_jobs', bool: 'true' },
+  { value: 'no_jobs', label: 'No jobs', param: 'has_jobs', bool: 'false' },
+  { value: 'quotes', label: 'Has quotes', param: 'has_quotes', bool: 'true' },
+  { value: 'invoices', label: 'Has invoices', param: 'has_invoices', bool: 'true' },
+  { value: 'addresses', label: 'Has properties', param: 'has_addresses', bool: 'true' },
+];
+
+const CONTACT_INFO_OPTIONS = [
+  { value: '', label: 'Any contact info' },
+  { value: 'has_email', label: 'Has email', param: 'has_email', bool: 'true' },
+  { value: 'missing_email', label: 'Missing email', param: 'has_email', bool: 'false' },
+  { value: 'has_phone', label: 'Has phone', param: 'has_phone', bool: 'true' },
+  { value: 'missing_phone', label: 'Missing phone', param: 'has_phone', bool: 'false' },
+];
+
+const ADDED_PRESET_OPTIONS = [
+  { value: '', label: 'Any time', days: null },
+  { value: '7d', label: 'Added last 7 days', days: 7 },
+  { value: '30d', label: 'Added last 30 days', days: 30 },
+  { value: '90d', label: 'Added last 90 days', days: 90 },
+];
+
+function isoDateDaysAgo(days) {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - days);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+function CompactSelect({ id, value, onChange, options, placeholder, minWidth = 152, active = false }) {
+  const selected = options.find((o) => o.value === value);
+  return (
+    <FormControl size="small" sx={{ minWidth, flex: '0 1 auto' }}>
+      <Select
+        id={id}
+        displayEmpty
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        renderValue={() => (value ? selected?.label : placeholder)}
+        MenuProps={{
+          PaperProps: { sx: { mt: 0.75, borderRadius: 2, maxHeight: 320 } },
+        }}
+        sx={{
+          height: 36,
+          borderRadius: 1.5,
+          fontSize: '0.8125rem',
+          fontWeight: active ? 600 : 500,
+          color: active ? 'text.primary' : 'text.secondary',
+          bgcolor: active ? 'action.selected' : 'background.paper',
+          '& .MuiOutlinedInput-notchedOutline': {
+            borderColor: active ? 'primary.light' : 'divider',
+          },
+          '&:hover .MuiOutlinedInput-notchedOutline': {
+            borderColor: active ? 'primary.main' : 'grey.400',
+          },
+          '& .MuiSelect-select': {
+            py: 0.75,
+            pl: 1.5,
+            pr: 4,
+          },
+        }}
+      >
+        {options.map((o) => (
+          <MenuItem key={o.value || `${id}-all`} value={o.value} sx={{ fontSize: '0.8125rem' }}>
+            {o.label}
+          </MenuItem>
+        ))}
+      </Select>
+    </FormControl>
+  );
+}
 
 /** Route segment for contact detail: GHL UUID preferred (matches dashboard detail lookup). */
 function contactDetailSlug(row) {
@@ -70,6 +159,11 @@ const Contacts = () => {
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [ordering, setOrdering] = useState('-date_added');
+  const [taxExemptFilter, setTaxExemptFilter] = useState('');
+  const [dndFilter, setDndFilter] = useState('');
+  const [activityFilter, setActivityFilter] = useState('');
+  const [contactInfoFilter, setContactInfoFilter] = useState('');
+  const [addedPreset, setAddedPreset] = useState('');
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
 
@@ -85,8 +179,16 @@ const Contacts = () => {
       ordering,
     };
     if (debouncedSearch) p.search = debouncedSearch;
+    if (taxExemptFilter === 'true' || taxExemptFilter === 'false') p.tax_exempt = taxExemptFilter;
+    if (dndFilter === 'true' || dndFilter === 'false') p.dnd = dndFilter;
+    const activity = ACTIVITY_OPTIONS.find((o) => o.value === activityFilter);
+    if (activity?.param) p[activity.param] = activity.bool;
+    const contactInfo = CONTACT_INFO_OPTIONS.find((o) => o.value === contactInfoFilter);
+    if (contactInfo?.param) p[contactInfo.param] = contactInfo.bool;
+    const added = ADDED_PRESET_OPTIONS.find((o) => o.value === addedPreset);
+    if (added?.days) p.date_added_after = isoDateDaysAgo(added.days);
     return p;
-  }, [page, pageSize, ordering, debouncedSearch]);
+  }, [page, pageSize, ordering, debouncedSearch, taxExemptFilter, dndFilter, activityFilter, contactInfoFilter, addedPreset]);
 
   const { data, isLoading, isFetching, error } = useGetDashboardContactsQuery(queryParams, {
     placeholderData: (previousData) => previousData,
@@ -98,9 +200,60 @@ const Contacts = () => {
   const handleClearFilters = () => {
     setSearchInput('');
     setDebouncedSearch('');
-    setOrdering('-date_added');
+    setTaxExemptFilter('');
+    setDndFilter('');
+    setActivityFilter('');
+    setContactInfoFilter('');
+    setAddedPreset('');
     setPage(1);
   };
+
+  const activeChips = useMemo(() => {
+    const chips = [];
+    if (debouncedSearch) {
+      chips.push({
+        key: 'search',
+        label: `Search: ${debouncedSearch}`,
+        onDelete: () => { setSearchInput(''); setDebouncedSearch(''); setPage(1); },
+      });
+    }
+    if (taxExemptFilter) {
+      chips.push({
+        key: 'tax',
+        label: TAX_STATUS_OPTIONS.find((o) => o.value === taxExemptFilter)?.label,
+        onDelete: () => { setTaxExemptFilter(''); setPage(1); },
+      });
+    }
+    if (dndFilter) {
+      chips.push({
+        key: 'dnd',
+        label: DND_OPTIONS.find((o) => o.value === dndFilter)?.label,
+        onDelete: () => { setDndFilter(''); setPage(1); },
+      });
+    }
+    if (activityFilter) {
+      chips.push({
+        key: 'activity',
+        label: ACTIVITY_OPTIONS.find((o) => o.value === activityFilter)?.label,
+        onDelete: () => { setActivityFilter(''); setPage(1); },
+      });
+    }
+    if (contactInfoFilter) {
+      chips.push({
+        key: 'info',
+        label: CONTACT_INFO_OPTIONS.find((o) => o.value === contactInfoFilter)?.label,
+        onDelete: () => { setContactInfoFilter(''); setPage(1); },
+      });
+    }
+    if (addedPreset) {
+      chips.push({
+        key: 'added',
+        label: ADDED_PRESET_OPTIONS.find((o) => o.value === addedPreset)?.label,
+        onDelete: () => { setAddedPreset(''); setPage(1); },
+      });
+    }
+    return chips;
+  }, [debouncedSearch, taxExemptFilter, dndFilter, activityFilter, contactInfoFilter, addedPreset]);
 
   return (
     <Box sx={(theme) => ({ ...contactsPageSx.canvas(theme), ...contactsPageSx.shell })}>
@@ -117,29 +270,39 @@ const Contacts = () => {
 
         <CompanyContactBanner mode="business" />
 
-        <Card elevation={0} sx={(theme) => ({ ...contactsPageSx.surface(theme), mb: 0 })}>
-          <CardContent sx={{ p: { xs: 2, sm: 2.5 } }}>
-          <Typography variant="subtitle2" fontWeight={600} color="text.primary" sx={{ mb: 2, fontSize: '0.8125rem' }}>
-            Filters
-          </Typography>
-          <Box
-            sx={{
-              display: 'grid',
-              gap: 2,
-              gridTemplateColumns: { xs: '1fr', sm: '1fr auto', md: 'minmax(0, 2fr) minmax(140px, 220px) auto' },
-              alignItems: 'end',
-            }}
+      {error && (
+        <Alert severity="error">
+          {error?.data?.detail || error?.error || 'Unable to load contacts.'}
+        </Alert>
+      )}
+
+      <Paper elevation={0} sx={(theme) => ({ ...contactsPageSx.surface(theme), overflow: 'hidden' })}>
+        <Box sx={{ px: { xs: 1.5, sm: 2 }, py: 1.75 }}>
+          <Stack
+            direction={{ xs: 'column', md: 'row' }}
+            spacing={1.5}
+            alignItems={{ xs: 'stretch', md: 'center' }}
+            justifyContent="space-between"
           >
             <TextField
               size="small"
-              label="Search"
-              placeholder="Name, email, phone, company, contact id…"
+              hiddenLabel
+              placeholder="Search by name, email, phone, company, or ID"
               value={searchInput}
               onChange={(e) => {
                 setSearchInput(e.target.value);
                 setPage(1);
               }}
-              fullWidth
+              sx={{
+                flex: 1,
+                minWidth: 0,
+                maxWidth: { md: 520 },
+                '& .MuiOutlinedInput-root': {
+                  height: 40,
+                  borderRadius: 2,
+                  bgcolor: (t) => (t.palette.mode === 'dark' ? 'action.hover' : 'grey.50'),
+                },
+              }}
               InputProps={{
                 startAdornment: (
                   <InputAdornment position="start">
@@ -148,44 +311,96 @@ const Contacts = () => {
                 ),
               }}
             />
-            <FormControl size="small" fullWidth>
-              <InputLabel id="contacts-ordering">Sort</InputLabel>
-              <Select
-                labelId="contacts-ordering"
-                label="Sort"
-                value={ordering}
-                onChange={(e) => {
-                  setOrdering(e.target.value);
-                  setPage(1);
-                }}
+            <Stack direction="row" spacing={1.25} alignItems="center" justifyContent={{ xs: 'space-between', md: 'flex-end' }}>
+              <Typography variant="body2" color="text.secondary" sx={{ whiteSpace: 'nowrap', fontVariantNumeric: 'tabular-nums' }}>
+                {isLoading ? 'Loading…' : `${total.toLocaleString()} ${total === 1 ? 'contact' : 'contacts'}`}
+              </Typography>
+              <Stack direction="row" spacing={0.75} alignItems="center">
+                <SwapVert sx={{ fontSize: 18, color: 'text.secondary', display: { xs: 'none', sm: 'block' } }} />
+                <CompactSelect
+                  id="contacts-ordering"
+                  placeholder="Sort"
+                  value={ordering}
+                  onChange={(v) => { setOrdering(v); setPage(1); }}
+                  options={ORDERING_OPTIONS}
+                  minWidth={200}
+                  active={ordering !== '-date_added'}
+                />
+              </Stack>
+            </Stack>
+          </Stack>
+
+          <Divider sx={{ my: 1.5 }} />
+
+          <Stack direction="row" spacing={1} useFlexGap flexWrap="wrap" alignItems="center">
+            <CompactSelect
+              id="contacts-tax-status"
+              placeholder="Tax status"
+              value={taxExemptFilter}
+              onChange={(v) => { setTaxExemptFilter(v); setPage(1); }}
+              options={TAX_STATUS_OPTIONS}
+              active={Boolean(taxExemptFilter)}
+            />
+            <CompactSelect
+              id="contacts-dnd"
+              placeholder="DND"
+              value={dndFilter}
+              onChange={(v) => { setDndFilter(v); setPage(1); }}
+              options={DND_OPTIONS}
+              active={Boolean(dndFilter)}
+            />
+            <CompactSelect
+              id="contacts-activity"
+              placeholder="Activity"
+              value={activityFilter}
+              onChange={(v) => { setActivityFilter(v); setPage(1); }}
+              options={ACTIVITY_OPTIONS}
+              minWidth={168}
+              active={Boolean(activityFilter)}
+            />
+            <CompactSelect
+              id="contacts-info"
+              placeholder="Contact info"
+              value={contactInfoFilter}
+              onChange={(v) => { setContactInfoFilter(v); setPage(1); }}
+              options={CONTACT_INFO_OPTIONS}
+              minWidth={168}
+              active={Boolean(contactInfoFilter)}
+            />
+            <CompactSelect
+              id="contacts-added"
+              placeholder="Date added"
+              value={addedPreset}
+              onChange={(v) => { setAddedPreset(v); setPage(1); }}
+              options={ADDED_PRESET_OPTIONS}
+              minWidth={168}
+              active={Boolean(addedPreset)}
+            />
+            {activeChips.length > 0 && (
+              <Button
+                size="small"
+                onClick={handleClearFilters}
+                sx={{ textTransform: 'none', fontWeight: 600, color: 'text.secondary', ml: 0.5 }}
               >
-                {ORDERING_OPTIONS.map((o) => (
-                  <MenuItem key={o.value} value={o.value}>
-                    {o.label}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-            <Button variant="text" color="inherit" onClick={handleClearFilters} sx={{ height: 40 }}>
-              Reset
-            </Button>
-          </Box>
-          </CardContent>
-        </Card>
+                Clear filters
+              </Button>
+            )}
+          </Stack>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 0 }}>
-          {error?.data?.detail || error?.error || 'Unable to load contacts.'}
-        </Alert>
-      )}
-
-      {!isLoading && !error && (
-        <Typography variant="body2" sx={{ fontSize: '0.8125rem', color: 'text.secondary' }}>
-          {total === 0 ? 'No contacts match your filters.' : `${total.toLocaleString()} record${total === 1 ? '' : 's'}`}
-        </Typography>
-      )}
-
-      <Paper elevation={0} sx={(theme) => ({ ...contactsPageSx.surface(theme), overflow: 'hidden' })}>
+          {activeChips.length > 0 && (
+            <Stack direction="row" spacing={0.75} useFlexGap flexWrap="wrap" sx={{ mt: 1.25 }}>
+              {activeChips.map((chip) => (
+                <Chip
+                  key={chip.key}
+                  size="small"
+                  label={chip.label}
+                  onDelete={chip.onDelete}
+                  sx={{ height: 26, fontWeight: 600 }}
+                />
+              ))}
+            </Stack>
+          )}
+        </Box>
         <TableContainer>
           <Table size="small" stickyHeader>
             <TableHead>

@@ -22,7 +22,7 @@ export const dashboardApi = createApi({
       query: (params = {}) => ({ url: 'invoices/lead_funnel_report/', params }),
       providesTags: ['Dashboard'],
     }),
-    /** Paginated CRM contacts (GHL-synced). Params: page, page_size, search, location_id, ordering */
+    /** Paginated CRM contacts. Params: page, page_size, search, location_id, ordering, tax_exempt, dnd, has_email, has_phone, has_company, date_added_after, date_added_before, has_jobs, has_pending_jobs, has_quotes, has_invoices, has_addresses */
     getDashboardContacts: builder.query({
       query: (params = {}) => ({ url: 'contacts/', params }),
       providesTags: (result) =>
