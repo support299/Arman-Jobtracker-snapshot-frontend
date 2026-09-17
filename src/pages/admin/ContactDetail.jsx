@@ -42,6 +42,7 @@ import {
   ContactAddressPanel,
 } from '../../components/admin/contacts/ContactMiscPanels';
 import { ContactAddressFormDialog } from '../../components/contacts/ContactAddressFormDialog';
+import { TaxExemptHelpButton } from '../../components/contacts/TaxExemptHelpButton';
 import {
   useCreateContactAddressMutation,
   useDeleteContactAddressMutation,
@@ -633,9 +634,12 @@ const ContactDetail = () => {
                 <Field label="Country" value={data.country} />
                 {isAdminRoute ? (
                   <Box>
-                    <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">
-                      Tax exempt
-                    </Typography>
+                    <Stack direction="row" alignItems="center" spacing={0.25}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                        Tax exempt
+                      </Typography>
+                      <TaxExemptHelpButton />
+                    </Stack>
                     <FormControlLabel
                       sx={{ ml: 0, mt: 0.25 }}
                       control={
@@ -650,10 +654,17 @@ const ContactDetail = () => {
                     />
                   </Box>
                 ) : (
-                  <Field
-                    label="Tax exempt"
-                    value={data.tax_exempt == null ? null : data.tax_exempt ? 'Yes' : 'No'}
-                  />
+                  <Box>
+                    <Stack direction="row" alignItems="center" spacing={0.25}>
+                      <Typography variant="caption" color="text.secondary" fontWeight={600}>
+                        Tax exempt
+                      </Typography>
+                      <TaxExemptHelpButton />
+                    </Stack>
+                    <Typography variant="body2">
+                      {data.tax_exempt == null ? '—' : data.tax_exempt ? 'Yes' : 'No'}
+                    </Typography>
+                  </Box>
                 )}
                 <Field label="Date added" value={when(data.date_added)} />
                 <Field label="Account id" value={data.account_id != null ? String(data.account_id) : null} />

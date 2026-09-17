@@ -35,6 +35,7 @@ import { ContactAddressFormDialog } from '../../components/contacts/ContactAddre
 import { ContactJobJobCard } from '../../components/admin/contacts/ContactJobJobCard';
 import { ContactQuotePanel } from '../../components/admin/contacts/ContactMiscPanels';
 import { CompanyContactBanner } from '../../components/contacts/CompanyContactBanner';
+import { TaxExemptHelpButton } from '../../components/contacts/TaxExemptHelpButton';
 import { profilePageSx } from './contactProfileTheme';
 import { useMoneyFormatter } from '../../hooks/useMoneyFormatter';
 import { getIframeLocationId } from '../../utils/iframeContext';
@@ -380,9 +381,12 @@ export default function ContactProfilePage() {
                 </Typography>
                 <Paper elevation={0} sx={{ p: 2, border: '1px solid #e4e7ec', borderRadius: 1.5 }}>
                   <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
-                    <Typography variant="body2" color="#667085">
-                      Tax exempt
-                    </Typography>
+                    <Stack direction="row" alignItems="center" spacing={0.5}>
+                      <Typography variant="body2" color="#667085">
+                        Tax exempt
+                      </Typography>
+                      <TaxExemptHelpButton iconColor="#98a2b3" />
+                    </Stack>
                     <FormControlLabel
                       sx={{ mr: 0 }}
                       control={
