@@ -232,8 +232,15 @@ const Contacts = () => {
                       >
                         <TableCell>
                           <Typography fontWeight={600} variant="body2">{name}</Typography>
-                          {row.dnd && (
-                            <Chip size="small" label="DND" color="warning" variant="outlined" sx={{ mt: 0.5, height: 22 }} />
+                          {(row.dnd || row.tax_exempt) && (
+                            <Stack direction="row" spacing={0.5} flexWrap="wrap" useFlexGap sx={{ mt: 0.5 }}>
+                              {row.dnd && (
+                                <Chip size="small" label="DND" color="warning" variant="outlined" sx={{ height: 22 }} />
+                              )}
+                              {row.tax_exempt && (
+                                <Chip size="small" label="Tax exempt" color="success" variant="outlined" sx={{ height: 22 }} />
+                              )}
+                            </Stack>
                           )}
                           <Typography variant="caption" color="text.secondary" sx={{ display: { md: 'none' }, mt: 0.25 }}>
                             {row.email || '—'}

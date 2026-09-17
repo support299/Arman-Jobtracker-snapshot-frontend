@@ -5,12 +5,15 @@ import {
   Avatar,
   Box,
   Button,
+  Chip,
   Divider,
+  FormControlLabel,
   Grid,
   IconButton,
   Paper,
   Skeleton,
   Stack,
+  Switch,
   Tab,
   Tabs,
   Typography,
@@ -22,7 +25,7 @@ import EmailOutlined from '@mui/icons-material/EmailOutlined';
 import HomeWorkOutlined from '@mui/icons-material/HomeWorkOutlined';
 import PhoneOutlined from '@mui/icons-material/PhoneOutlined';
 import moment from 'moment-timezone';
-import { useGetDashboardContactByIdQuery } from '../../store/api/dashboardApi';
+import { useGetDashboardContactByIdQuery, useUpdateDashboardContactMutation } from '../../store/api/dashboardApi';
 import {
   useCreateContactAddressMutation,
   useDeleteContactAddressMutation,
@@ -175,6 +178,7 @@ export default function ContactProfilePage() {
   const [editingAddress, setEditingAddress] = useState(null);
   const [selectedJobId, setSelectedJobId] = useState(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState(null);
+  const [taxExemptError, setTaxExemptError] = useState(null);
 
   const { data, isLoading, error, refetch } = useGetDashboardContactByIdQuery(contactKey, {
     skip: contactKey == null,
@@ -182,6 +186,7 @@ export default function ContactProfilePage() {
   const [createAddress, { isLoading: creating }] = useCreateContactAddressMutation();
   const [updateAddress, { isLoading: updating }] = useUpdateContactAddressMutation();
   const [deleteAddress, { isLoading: deleting }] = useDeleteContactAddressMutation();
+  const [updateContact, { isLoading: updatingTaxExempt }] = useUpdateDashboardContactMutation();
 
   const ghlContactId = data?.contact_id || (typeof contactKey === 'string' ? contactKey : null);
 
@@ -238,6 +243,21 @@ export default function ContactProfilePage() {
     if (!window.confirm(`Remove "${address.name || 'this property'}"?`)) return;
     await deleteAddress({ ghlContactId, addressId: address.id }).unwrap();
     refetch();
+  };
+
+  const handleTaxExemptChange = async (checked) => {
+    if (!data?.contact_id) return;
+    setTaxExemptError(null);
+    try {
+      await updateContact({
+        ghlContactId: data.contact_id,
+        lookupId: contactKey,
+        tax_exempt: checked,
+      }).unwrap();
+      refetch();
+    } catch (err) {
+      setTaxExemptError(err?.data?.detail || 'Could not update tax exempt.');
+    }
   };
 
   const addPropertyBtn = (
@@ -321,7 +341,12 @@ export default function ContactProfilePage() {
                 {initials(data.first_name, data.last_name, data.email)}
               </Avatar>
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography sx={profilePageSx.displayName}>{displayName}</Typography>
+                <Stack direction="row" spacing={1} alignItems="center" flexWrap="wrap" useFlexGap>
+                  <Typography sx={profilePageSx.displayName}>{displayName}</Typography>
+                  {data.tax_exempt && (
+                    <Chip label="Tax exempt" size="small" color="success" variant="outlined" />
+                  )}
+                </Stack>
                 <Typography sx={profilePageSx.subtitle}>
                   Manage properties, jobs, and quotes for this contact.
                 </Typography>
@@ -353,6 +378,30 @@ export default function ContactProfilePage() {
                 <Typography variant="body2" color="#667085" lineHeight={1.6}>
                   Review saved properties, active jobs, and quote history from a single place.
                 </Typography>
+                <Paper elevation={0} sx={{ p: 2, border: '1px solid #e4e7ec', borderRadius: 1.5 }}>
+                  <Stack direction="row" justifyContent="space-between" alignItems="center" spacing={2}>
+                    <Typography variant="body2" color="#667085">
+                      Tax exempt
+                    </Typography>
+                    <FormControlLabel
+                      sx={{ mr: 0 }}
+                      control={
+                        <Switch
+                          size="small"
+                          checked={!!data.tax_exempt}
+                          disabled={updatingTaxExempt || !data.contact_id}
+                          onChange={(e) => handleTaxExemptChange(e.target.checked)}
+                        />
+                      }
+                      label={data.tax_exempt ? 'Yes' : 'No'}
+                    />
+                  </Stack>
+                  {taxExemptError && (
+                    <Alert severity="error" sx={{ mt: 1.5, borderRadius: 1.5 }} onClose={() => setTaxExemptError(null)}>
+                      {taxExemptError}
+                    </Alert>
+                  )}
+                </Paper>
                 {addresses.length === 0 ? (
                   <Alert
                     severity="info"

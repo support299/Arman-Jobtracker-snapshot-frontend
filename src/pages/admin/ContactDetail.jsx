@@ -7,11 +7,13 @@ import {
   Breadcrumbs,
   Button,
   Chip,
+  FormControlLabel,
   Grid,
   Link,
   Paper,
   Skeleton,
   Stack,
+  Switch,
   Tab,
   Tabs,
   Typography,
@@ -29,7 +31,7 @@ import ListAltOutlined from '@mui/icons-material/ListAltOutlined';
 import { ArrowBack, ContentCopy, OpenInNew, CardGiftcard } from '@mui/icons-material';
 import TableChart from '@mui/icons-material/TableChart';
 import moment from 'moment-timezone';
-import { useGetDashboardContactByIdQuery } from '../../store/api/dashboardApi';
+import { useGetDashboardContactByIdQuery, useUpdateDashboardContactMutation } from '../../store/api/dashboardApi';
 import { useEnsureReferralLinkMutation } from '../../store/api/referralsApi';
 import { ContactActivitySplit } from '../../components/admin/contacts/ContactActivitySplit';
 import { ContactJobJobCard } from '../../components/admin/contacts/ContactJobJobCard';
@@ -118,6 +120,8 @@ const ContactDetail = () => {
   const [updateAddress, { isLoading: updatingAddr }] = useUpdateContactAddressMutation();
   const [deleteAddress, { isLoading: deletingAddr }] = useDeleteContactAddressMutation();
   const [ensureReferralLink, { isLoading: ensuringReferral }] = useEnsureReferralLinkMutation();
+  const [updateContact, { isLoading: updatingTaxExempt }] = useUpdateDashboardContactMutation();
+  const [taxExemptError, setTaxExemptError] = useState(null);
   const [referralLocal, setReferralLocal] = useState(null);
   const [referralMsg, setReferralMsg] = useState(null);
   const [copiedReferral, setCopiedReferral] = useState(false);
@@ -133,6 +137,7 @@ const ContactDetail = () => {
     setSelAddr(null);
     setReferralLocal(null);
     setReferralMsg(null);
+    setTaxExemptError(null);
   }, [tab, contactKey]);
 
   const referral = referralLocal || data?.referral || null;
@@ -167,6 +172,21 @@ const ContactDetail = () => {
     await navigator.clipboard.writeText(url);
     setCopiedReferral(true);
     window.setTimeout(() => setCopiedReferral(false), 1600);
+  };
+
+  const handleTaxExemptChange = async (checked) => {
+    if (!data?.contact_id) return;
+    setTaxExemptError(null);
+    try {
+      await updateContact({
+        ghlContactId: data.contact_id,
+        lookupId: contactKey,
+        tax_exempt: checked,
+      }).unwrap();
+      refetch();
+    } catch (err) {
+      setTaxExemptError(err?.data?.detail || 'Could not update tax exempt.');
+    }
   };
 
   const displayName = useMemo(() => {
@@ -362,6 +382,9 @@ const ContactDetail = () => {
           </Stack>
           <Stack direction="row" spacing={1} flexWrap="wrap" useFlexGap justifyContent={{ xs: 'flex-start', sm: 'flex-end' }}>
             {data.dnd && <Chip label="Do not disturb" size="small" sx={{ bgcolor: 'warning.50', borderColor: 'warning.light' }} variant="outlined" />}
+            {data.tax_exempt && (
+              <Chip label="Tax exempt" size="small" color="success" variant="outlined" />
+            )}
             {isAdminRoute && ghlContactUrl && (
               <Button variant="contained" disableElevation endIcon={<OpenInNew sx={{ fontSize: 18 }} />} href={ghlContactUrl} target="_blank" rel="noopener noreferrer" sx={{ textTransform: 'none', fontWeight: 600, borderRadius: 2, px: 2 }}>
                 Open in CRM
@@ -608,9 +631,38 @@ const ContactDetail = () => {
                 {isAdminRoute && <Field label="GHL contact id" value={data.contact_id} mono />}
                 {isAdminRoute && <Field label="Location id" value={data.location_id} mono />}
                 <Field label="Country" value={data.country} />
+                {isAdminRoute ? (
+                  <Box>
+                    <Typography variant="caption" color="text.secondary" fontWeight={600} display="block">
+                      Tax exempt
+                    </Typography>
+                    <FormControlLabel
+                      sx={{ ml: 0, mt: 0.25 }}
+                      control={
+                        <Switch
+                          size="small"
+                          checked={!!data.tax_exempt}
+                          disabled={updatingTaxExempt || !data.contact_id}
+                          onChange={(e) => handleTaxExemptChange(e.target.checked)}
+                        />
+                      }
+                      label={data.tax_exempt ? 'Yes' : 'No'}
+                    />
+                  </Box>
+                ) : (
+                  <Field
+                    label="Tax exempt"
+                    value={data.tax_exempt == null ? null : data.tax_exempt ? 'Yes' : 'No'}
+                  />
+                )}
                 <Field label="Date added" value={when(data.date_added)} />
                 <Field label="Account id" value={data.account_id != null ? String(data.account_id) : null} />
               </Box>
+              {taxExemptError && (
+                <Alert severity="error" onClose={() => setTaxExemptError(null)}>
+                  {taxExemptError}
+                </Alert>
+              )}
               {Array.isArray(data.custom_fields) && data.custom_fields.length > 0 && (
                 <Alert severity="info" variant="outlined">
                   This contact has custom fields in CRM data; open GoHighLevel for full field editing.
