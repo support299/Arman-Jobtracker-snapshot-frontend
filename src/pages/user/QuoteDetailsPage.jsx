@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { useSelector } from "react-redux"
 import { useParams, useNavigate } from "react-router-dom"
 import {
   Box,
@@ -72,6 +73,9 @@ const formatYesNo = (val) => {
 const QuoteDetailsPage = () => {
   const { id } = useParams()
   const navigate = useNavigate()
+  const authUser = useSelector((state) => state.auth.user)
+  const accessToken = useSelector((state) => state.auth.access)
+  const isLoggedIn = Boolean(authUser && accessToken)
   const [expandedServices, setExpandedServices] = useState({})
   const [activeTab, setActiveTab] = useState("recurring")
   const [showTermsDialog, setShowTermsDialog] = useState(false)
@@ -208,6 +212,13 @@ const QuoteDetailsPage = () => {
     images,
     quote_origin,
   } = quote
+
+  const customerVisibleNotes = (
+    additional_data?.customer_notes ||
+    (quote_origin === "public" ? additional_data?.additional_notes : "") ||
+    ""
+  ).trim()
+  const technicianVisibleNotes = isLoggedIn ? String(quote?.technician_notes || "").trim() : ""
 
   const renderQuestionResponse = (response) => {
     switch (response.question_type) {
@@ -832,7 +843,8 @@ const QuoteDetailsPage = () => {
                   additional_data,
                   house_sqft,
                   profile,
-                  locationId
+                  locationId,
+                  { includeTechnicianNotes: isLoggedIn }
                 )
               }
               disabled={isGeneratingPDF}
@@ -1250,7 +1262,7 @@ const QuoteDetailsPage = () => {
               )}
 
               {/* Additional Information */}
-              {(additional_data && (additional_data?.signature || additional_data?.additional_notes)) || quoted_by_details ? (
+              {(additional_data && (additional_data?.signature || customerVisibleNotes || technicianVisibleNotes)) || quoted_by_details ? (
                 <Card>
                   <Box sx={{ p: 3, py: 2 }}>
                     <Stack direction="row" alignItems="center" spacing={2}>
@@ -1416,19 +1428,41 @@ const QuoteDetailsPage = () => {
                         </Box>
                       )}
 
-                      {additional_data?.additional_notes && (
+                      {customerVisibleNotes && (
                         <Box>
                           <Typography variant="subtitle2" sx={{ color: "#64748b", mb: 1 }}>
-                            Additional Notes
+                            General Notes
                           </Typography>
                           <Box
                             sx={{
-                              border: "1px solid #334155",
+                              border: "1px solid #cbd5e1",
                               borderRadius: 1,
                               p: 2,
+                              bgcolor: "#f8fafc",
                             }}
                           >
-                            <Typography variant="body2">{additional_data.additional_notes}</Typography>
+                            <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{customerVisibleNotes}</Typography>
+                          </Box>
+                        </Box>
+                      )}
+
+                      {technicianVisibleNotes && (
+                        <Box>
+                          <Typography variant="subtitle2" sx={{ color: "#64748b", mb: 1 }}>
+                            Private Technician Notes
+                          </Typography>
+                          <Box
+                            sx={{
+                              border: "1px solid #fde68a",
+                              borderRadius: 1,
+                              p: 2,
+                              bgcolor: "#fffbeb",
+                            }}
+                          >
+                            <Typography variant="caption" sx={{ color: "#c2410c", fontWeight: 600, display: "block", mb: 0.75 }}>
+                              Internal only — not shown to customer
+                            </Typography>
+                            <Typography variant="body2" sx={{ whiteSpace: "pre-wrap" }}>{technicianVisibleNotes}</Typography>
                           </Box>
                         </Box>
                       )}

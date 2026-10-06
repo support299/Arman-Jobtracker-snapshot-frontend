@@ -53,6 +53,7 @@ import { useCalculatePriceMutation } from '../../../store/api/user/priceApi';
 import { useCreateCustomProductMutation, useDeleteCustomProductMutation, useGetQuoteDetailsQuery, useUpdateCustomProductMutation, useDeleteServiceMutation, useGetGlobalPriceQuery, useRejectQuoteMutation, useUpdateAdditionalDataMutation, usePersistQuoteSnapshotMutation, useUpdateSubmissionMutation } from '../../../store/api/user/quoteApi';
 import { useGetContactReferralCreditQuery } from '../../../store/api/referralsApi';
 import SignatureCanvas from 'react-signature-canvas';
+import { useSelector } from 'react-redux';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import { handleDownloadPDF } from '../../../utils/handleDownloadPDF';
 import { Swiper, SwiperSlide } from 'swiper/react';
@@ -88,6 +89,9 @@ const calculateTotalSelectedPrice = (selectedPackages, quoteData) => {
   };
 
 export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setTermsAccepted, additionalNotes, setAdditionalNotes, handleSignatureEnd, setSignature, signatureTimestamp, isStepComplete, handleNext, setActiveStep, setBookingData, initialBookingData, readOnly = false, isPublicMode = false }) => {
+  const authUser = useSelector((state) => state.auth.user);
+  const accessToken = useSelector((state) => state.auth.access);
+  const isLoggedIn = Boolean(authUser && accessToken);
   const { profile, locationId, formatPrice } = useAccountBranding();
   const termsHref = locationId
     ? `/terms?location_id=${encodeURIComponent(locationId)}`
@@ -127,6 +131,8 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
   const [isPersistingSnapshot, setIsPersistingSnapshot] = useState(false);
   const [persistedSnapshotId, setPersistedSnapshotId] = useState(null);
   const [technicianNotes, setTechnicianNotes] = useState('');
+  const [generalNotes, setGeneralNotes] = useState('');
+  const [isSavingGeneralNotes, setIsSavingGeneralNotes] = useState(false);
 
   const [searchParams] = useSearchParams();
   const submissionIdFromUrl = searchParams.get("submission_id");
@@ -156,7 +162,10 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
   const sigCanvasRef = useRef(null);
   const autoSaveTimeoutRef = useRef(null);
   const techNotesTimeoutRef = useRef(null);
+  const generalNotesTimeoutRef = useRef(null);
   const notesTextareaRef = useRef(null);
+  const generalNotesTextareaRef = useRef(null);
+  const techNotesTextareaRef = useRef(null);
 
   const quoteData = useMemo(() => response, [response]);
   const isEditable = !readOnly && !quoteData?.is_persisted_snapshot;
@@ -309,21 +318,33 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
 
   // Load additional notes from quoteData when it's available (only if not already set)
   useEffect(() => {
+    if (!isPublicMode) return;
     if (quoteData?.additional_data?.additional_notes !== undefined && 
         (!additionalNotes || additionalNotes === '')) {
       setAdditionalNotes(quoteData.additional_data.additional_notes || '');
     }
-  }, [quoteData?.additional_data?.additional_notes]);
+  }, [quoteData?.additional_data?.additional_notes, isPublicMode]);
 
   useEffect(() => {
     if (isPublicMode) return;
+    const saved = quoteData?.additional_data?.customer_notes;
+    if (saved && !generalNotes) {
+      setGeneralNotes(saved);
+      if (typeof setAdditionalNotes === 'function') {
+        setAdditionalNotes(saved);
+      }
+    }
+  }, [quoteData?.additional_data?.customer_notes, isPublicMode]);
+
+  useEffect(() => {
+    if (isPublicMode || !isLoggedIn) return;
     const saved = quoteData?.technician_notes;
     const legacy = quoteData?.quote_origin === 'public' ? '' : (quoteData?.additional_data?.additional_notes || '');
     const next = (saved || legacy || '').trim();
     if (next && !technicianNotes) {
       setTechnicianNotes(saved || legacy || '');
     }
-  }, [quoteData?.technician_notes, quoteData?.additional_data?.additional_notes, quoteData?.quote_origin, isPublicMode]);
+  }, [quoteData?.technician_notes, quoteData?.additional_data?.additional_notes, quoteData?.quote_origin, isPublicMode, isLoggedIn]);
 
   // Check if notes are submitted (read-only)
   const isNotesSubmitted = readOnly || quoteData?.is_persisted_snapshot || quoteData?.additional_data?.is_submitted === true;
@@ -354,30 +375,26 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
   }
 
   // Auto-resize textarea based on content
-  const adjustTextareaHeight = useCallback(() => {
-    // Access the textarea element through the ref
-    const textarea = notesTextareaRef.current;
+  const adjustTextareaHeight = useCallback((textareaEl) => {
+    const textarea = textareaEl?.tagName === 'TEXTAREA' ? textareaEl : notesTextareaRef.current;
     if (textarea && textarea.tagName === 'TEXTAREA') {
-      // Reset height to auto to get the correct scrollHeight
       textarea.style.height = 'auto';
-      // Calculate new height based on content
-      const minHeight = 80; // Minimum height in pixels (approximately 3 rows)
-      const maxHeight = 300; // Maximum height in pixels
+      const minHeight = 80;
+      const maxHeight = 300;
       const newHeight = Math.min(Math.max(textarea.scrollHeight, minHeight), maxHeight);
       textarea.style.height = `${newHeight}px`;
-      // Show scrollbar if content exceeds max height
       textarea.style.overflowY = textarea.scrollHeight > maxHeight ? 'auto' : 'hidden';
     }
   }, []);
 
-  // Adjust textarea height when content changes
   useEffect(() => {
-    // Use a small timeout to ensure DOM is updated
     const timer = setTimeout(() => {
-      adjustTextareaHeight();
+      adjustTextareaHeight(notesTextareaRef.current);
+      adjustTextareaHeight(generalNotesTextareaRef.current);
+      adjustTextareaHeight(techNotesTextareaRef.current);
     }, 0);
     return () => clearTimeout(timer);
-  }, [additionalNotes, technicianNotes, adjustTextareaHeight]);
+  }, [additionalNotes, generalNotes, technicianNotes, adjustTextareaHeight]);
 
   // Auto-save additional notes with debouncing
   const autoSaveAdditionalNotes = useCallback((notes) => {
@@ -422,11 +439,42 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
   }, [data.submission_id, updateAdditionalData, isNotesSubmitted]);
 
   const isTechNotesReadOnly = readOnly || quoteData?.is_persisted_snapshot;
+  const isGeneralNotesReadOnly = readOnly || quoteData?.is_persisted_snapshot;
+  const autoSaveGeneralNotes = useCallback((notes) => {
+    if (generalNotesTimeoutRef.current) {
+      clearTimeout(generalNotesTimeoutRef.current);
+    }
+    if (!data.submission_id || isGeneralNotesReadOnly) {
+      return;
+    }
+    generalNotesTimeoutRef.current = setTimeout(async () => {
+      setIsSavingGeneralNotes(true);
+      try {
+        await updateAdditionalData({
+          submissionId: data.submission_id,
+          payload: {
+            additional_data: {
+              customer_notes: notes || '',
+            },
+          },
+        }).unwrap();
+        setToastMessage('General notes saved');
+        setToastOpen(true);
+      } catch (error) {
+        console.error('Failed to save general notes:', error);
+        setToastMessage('Failed to save general notes. Please try again.');
+        setToastOpen(true);
+      } finally {
+        setIsSavingGeneralNotes(false);
+      }
+    }, 1000);
+  }, [data.submission_id, updateAdditionalData, isGeneralNotesReadOnly]);
+
   const autoSaveTechnicianNotes = useCallback((notes) => {
     if (techNotesTimeoutRef.current) {
       clearTimeout(techNotesTimeoutRef.current);
     }
-    if (!data.submission_id || isTechNotesReadOnly) {
+    if (!data.submission_id || isTechNotesReadOnly || !isLoggedIn) {
       return;
     }
     techNotesTimeoutRef.current = setTimeout(async () => {
@@ -446,7 +494,7 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
         setIsSavingNotes(false);
       }
     }, 1000);
-  }, [data.submission_id, updateSubmission, isTechNotesReadOnly]);
+  }, [data.submission_id, updateSubmission, isTechNotesReadOnly, isLoggedIn]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -456,6 +504,9 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
       }
       if (techNotesTimeoutRef.current) {
         clearTimeout(techNotesTimeoutRef.current);
+      }
+      if (generalNotesTimeoutRef.current) {
+        clearTimeout(generalNotesTimeoutRef.current);
       }
     };
   }, []);
@@ -826,11 +877,13 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
                   service_selections,
                   custom_products,
                   globalPriceData,
-                  additional_data,
+                  isPublicMode
+                    ? additional_data
+                    : { ...(additional_data || {}), customer_notes: generalNotes || additional_data?.customer_notes || '' },
                   house_sqft,
                   profile,
                   locationId,
-                  { includeTechnicianNotes: !isPublicMode }
+                  { includeTechnicianNotes: !isPublicMode && isLoggedIn }
                 )
               }
               disabled={isGeneratingPDF}
@@ -1370,11 +1423,10 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
           </Card>
         )}
 
-        {/* Additional Notes / private technician notes */}
+        {/* Public quote notes — unchanged */}
+        {isPublicMode ? (
         <Card sx={{ mb: 3 }}>
           <CardContent sx={{ p: 3 }}>
-            {isPublicMode ? (
-            <>
             <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
               <Box display="flex" alignItems="center" gap={1}>
                 <Typography variant="h6" fontWeight={600} sx={{ color: '#0f766e' }}>
@@ -1471,27 +1523,131 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
                 },
               }}
             />
-            </>
-            ) : (
-            <>
-            <Box display="flex" alignItems="center" justifyContent="space-between" mb={1}>
-              <Box display="flex" alignItems="center" gap={1}>
+          </CardContent>
+        </Card>
+        ) : (
+        <>
+        <Card sx={{ mb: 3, border: '1px solid #dbeafe' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
+              <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
                 <Typography variant="h6" fontWeight={600} sx={{ color: '#023c8f' }}>
-                  Private technician notes
+                  General Notes
                 </Typography>
-                {isSavingNotes && (
-                  <Box display="flex" alignItems="center" gap={1}>
-                    <CircularProgress size={16} sx={{ color: '#023c8f' }} />
-                    <Typography variant="caption" sx={{ color: '#023c8f', fontSize: '0.75rem' }}>
-                      Saving...
-                    </Typography>
-                  </Box>
+                <Chip
+                  size="small"
+                  label="Visible to customer"
+                  sx={{
+                    bgcolor: '#ecfdf5',
+                    color: '#047857',
+                    fontWeight: 600,
+                    fontSize: '0.7rem',
+                    height: 22,
+                  }}
+                />
+                {isGeneralNotesReadOnly && (
+                  <Lock sx={{ color: '#666', fontSize: 18 }} />
                 )}
               </Box>
+              {isSavingGeneralNotes && (
+                <Box display="flex" alignItems="center" gap={1}>
+                  <CircularProgress size={16} sx={{ color: '#023c8f' }} />
+                  <Typography variant="caption" sx={{ color: '#023c8f', fontSize: '0.75rem' }}>
+                    Saving...
+                  </Typography>
+                </Box>
+              )}
             </Box>
+            <Typography variant="body2" sx={{ color: '#64748b', mb: 1.5 }}>
+              Information the customer should see on this quote.
+            </Typography>
             <TextField
-              inputRef={notesTextareaRef}
-              placeholder="Gate codes, hose bib, dog in yard, crew instructions… customer will not see this."
+              inputRef={generalNotesTextareaRef}
+              placeholder="Add anything you want the customer to see on this quote…"
+              multiline
+              fullWidth
+              disabled={isGeneralNotesReadOnly}
+              value={generalNotes || ''}
+              onChange={(e) => {
+                if (isGeneralNotesReadOnly) return;
+                const newValue = e.target.value;
+                setGeneralNotes(newValue);
+                if (typeof setAdditionalNotes === 'function') {
+                  setAdditionalNotes(newValue);
+                }
+                autoSaveGeneralNotes(newValue);
+                setTimeout(() => adjustTextareaHeight(generalNotesTextareaRef.current), 0);
+              }}
+              helperText={
+                <Box display="flex" justifyContent="space-between" alignItems="center" mt={0.5}>
+                  <Typography variant="caption" sx={{ color: '#666', fontSize: '0.75rem' }}>
+                    {isGeneralNotesReadOnly
+                      ? 'These notes are locked on the signed proposal copy'
+                      : 'Saved automatically. Shown on the customer quote and PDF.'}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: '#666', fontSize: '0.75rem' }}>
+                    {(generalNotes?.length || 0)} / 2000 characters
+                  </Typography>
+                </Box>
+              }
+              inputProps={{
+                maxLength: 2000,
+                readOnly: isGeneralNotesReadOnly,
+              }}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  bgcolor: '#f8fafc',
+                  '& textarea': {
+                    resize: 'none',
+                    overflow: 'hidden',
+                    minHeight: '80px !important',
+                    lineHeight: '1.5',
+                    padding: '14px',
+                  },
+                },
+              }}
+            />
+          </CardContent>
+        </Card>
+
+        {isLoggedIn && (
+        <Card sx={{ mb: 3, border: '1px solid #fde68a', bgcolor: '#fffbeb' }}>
+          <CardContent sx={{ p: 3 }}>
+            <Box display="flex" alignItems="center" justifyContent="space-between" mb={1.5}>
+              <Box display="flex" alignItems="center" gap={1} flexWrap="wrap">
+                <Typography variant="h6" fontWeight={600} sx={{ color: '#023c8f' }}>
+                  Private Technician Notes
+                </Typography>
+                <Chip
+                  size="small"
+                  label="Internal only"
+                  sx={{
+                    bgcolor: '#fff7ed',
+                    color: '#c2410c',
+                    fontWeight: 600,
+                    fontSize: '0.7rem',
+                    height: 22,
+                  }}
+                />
+                {isTechNotesReadOnly && (
+                  <Lock sx={{ color: '#666', fontSize: 18 }} />
+                )}
+              </Box>
+              {isSavingNotes && (
+                <Box display="flex" alignItems="center" gap={1}>
+                  <CircularProgress size={16} sx={{ color: '#023c8f' }} />
+                  <Typography variant="caption" sx={{ color: '#023c8f', fontSize: '0.75rem' }}>
+                    Saving...
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+            <Typography variant="body2" sx={{ color: '#64748b', mb: 1.5 }}>
+              Team-only notes. The customer never sees this.
+            </Typography>
+            <TextField
+              inputRef={techNotesTextareaRef}
+              placeholder="Gate codes, hose bib, dog in yard, crew instructions…"
               multiline
               fullWidth
               disabled={isTechNotesReadOnly}
@@ -1501,14 +1657,14 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
                 const newValue = e.target.value;
                 setTechnicianNotes(newValue);
                 autoSaveTechnicianNotes(newValue);
-                setTimeout(adjustTextareaHeight, 0);
+                setTimeout(() => adjustTextareaHeight(techNotesTextareaRef.current), 0);
               }}
               helperText={
                 <Box display="flex" justifyContent="space-between" alignItems="center" mt={0.5}>
                   <Typography variant="caption" sx={{ color: '#666', fontSize: '0.75rem' }}>
                     {isTechNotesReadOnly
                       ? 'These notes are locked on the signed proposal copy'
-                      : 'Saved automatically. Shown to technicians on the signed proposal, not to the customer or on the invoice.'}
+                      : 'Saved automatically. Copied to the job. Never shown to the customer or on the invoice.'}
                   </Typography>
                   <Typography variant="caption" sx={{ color: '#666', fontSize: '0.75rem' }}>
                     {(technicianNotes?.length || 0)} / 2000 characters
@@ -1521,6 +1677,7 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
               }}
               sx={{
                 '& .MuiOutlinedInput-root': {
+                  bgcolor: '#fff',
                   '& textarea': {
                     resize: 'none',
                     overflow: 'hidden',
@@ -1531,15 +1688,11 @@ export const CheckoutSummary = ({ data, onUpdate = () => {}, termsAccepted, setT
                 },
               }}
             />
-            {!isTechNotesReadOnly && (
-              <Alert severity="info" sx={{ mt: 2 }}>
-                Customer cannot see these notes. They appear on the signed proposal for technicians only.
-              </Alert>
-            )}
-            </>
-            )}
           </CardContent>
         </Card>
+        )}
+        </>
+        )}
 
         {/* Quoted By */}
         {quoteData.quoted_by_details && (
